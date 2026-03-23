@@ -10,6 +10,11 @@ export interface StructuredOutputBaseEvent {
 	event: StructuredOutputEventType
 	timestamp: number
 	taskId?: string
+	/**
+	 * Currently set to the same value as taskId.
+	 * Will be differentiated when Cline adds durable session support
+	 * (a session may span multiple tasks).
+	 */
 	sessionId?: string
 }
 
@@ -94,15 +99,15 @@ export function createStructuredMessageEvent(
 ): StructuredMessageEvent {
 	const timestamp = message.ts
 	return {
+		...message, // spread message first so envelope fields take precedence
 		schemaVersion: STRUCTURED_OUTPUT_SCHEMA_VERSION,
-		event: "message",
+		event: "message" as const,
 		timestamp,
 		ts: timestamp,
 		taskId,
 		sessionId: taskId,
 		role: getStructuredMessageRole(message, index),
 		messageType: message.type,
-		...message,
 	}
 }
 
@@ -159,6 +164,13 @@ export function createStructuredErrorEvent(
 	}
 }
 
+/**
+ * CLI exit codes for structured output mode:
+ *   0 - Success (attempt_completion reached)
+ *   1 - Error (unhandled or tool failure)
+ *   4 - Timeout
+ *   5 - Aborted (user cancelled)
+ */
 export function deriveStructuredExitCode(status: StructuredCompletionStatus): number {
 	switch (status) {
 		case "success":
@@ -173,15 +185,38 @@ export function deriveStructuredExitCode(status: StructuredCompletionStatus): nu
 	}
 }
 
-export function inferStructuredStatusFromError(errorMessage: string): StructuredCompletionStatus {
-	const normalized = errorMessage.toLowerCase()
+/**
+ * Infer a completion status from an error.
+ * Checks error name/type first for reliable classification,
+ * falls back to message substring matching only for untyped errors.
+ */
+export function inferStructuredStatusFromError(error: unknown): StructuredCompletionStatus {
+	if (error instanceof Error) {
+		// Check error name/type first (most reliable)
+		const name = error.name.toLowerCase()
+		if (name === "aborterror" || name === "cancelederror" || name === "cancellederror") {
+			return "aborted"
+		}
+		if (name === "timeouterror") {
+			return "timeout"
+		}
 
-	if (normalized.includes("timeout")) {
-		return "timeout"
-	}
-
-	if (normalized.includes("abort") || normalized.includes("cancel")) {
-		return "aborted"
+		// Fallback to message matching for untyped errors
+		const msg = error.message.toLowerCase()
+		if (msg.includes("timeout")) {
+			return "timeout"
+		}
+		if (msg.includes("abort") || msg.includes("cancel")) {
+			return "aborted"
+		}
+	} else if (typeof error === "string") {
+		const normalized = error.toLowerCase()
+		if (normalized.includes("timeout")) {
+			return "timeout"
+		}
+		if (normalized.includes("abort") || normalized.includes("cancel")) {
+			return "aborted"
+		}
 	}
 
 	return "error"

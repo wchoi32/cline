@@ -156,13 +156,13 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<P
 					processMessage(messages[i], i)
 				}
 			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error)
 				if (jsonOutput) {
-					const errorMessage = error instanceof Error ? error.message : String(error)
-					emitCompletionEvent(inferStructuredStatusFromError(errorMessage), undefined, errorMessage)
+					emitCompletionEvent(inferStructuredStatusFromError(error), undefined, errorMessage)
 				} else {
-					process.stderr.write(`Error: ${error instanceof Error ? error.message : String(error)}\n`)
+					process.stderr.write(`Error: ${errorMessage}\n`)
 				}
-				terminalStatus = inferStructuredStatusFromError(error instanceof Error ? error.message : String(error))
+				terminalStatus = inferStructuredStatusFromError(error)
 				completionReject(error)
 			}
 		},
@@ -202,7 +202,7 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<P
 		}
 	} catch (error) {
 		const errMsg = error instanceof Error ? error.message : String(error)
-		terminalStatus = inferStructuredStatusFromError(errMsg)
+		terminalStatus = inferStructuredStatusFromError(error)
 		if (jsonOutput) {
 			emitCompletionEvent(terminalStatus, undefined, errMsg)
 		} else {
