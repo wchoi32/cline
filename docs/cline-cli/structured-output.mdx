@@ -13,7 +13,7 @@ All events include `schemaVersion: 1`. This field will be incremented if breakin
 
 ## Event Types
 
-There are four event types: `start`, `message`, `complete`, and `error`.
+There are three event types: `start`, `message`, and `complete`.
 
 ### `start`
 
@@ -109,33 +109,7 @@ Emitted when the task finishes (success or failure).
 | `say` | `string?` | Original say type if present |
 | `text` | `string?` | Original text content if present |
 
-### `error`
-
-Emitted for errors that occur outside the normal task completion flow (e.g., initialization failures, unhandled exceptions).
-
-```json
-{
-  "schemaVersion": 1,
-  "event": "error",
-  "timestamp": 1711100002000,
-  "taskId": "abc123",
-  "sessionId": "abc123",
-  "status": "error",
-  "exitCode": 1,
-  "message": "Failed to initialize provider"
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `schemaVersion` | `1` | Protocol version |
-| `event` | `"error"` | Event type |
-| `timestamp` | `number` | Unix milliseconds |
-| `taskId` | `string?` | Task identifier (may be absent if error occurs before task creation) |
-| `sessionId` | `string?` | Session identifier |
-| `status` | `"error" \| "timeout" \| "aborted"` | Error classification |
-| `exitCode` | `number` | Process exit code |
-| `message` | `string` | Human-readable error description |
+Errors are represented as `complete` events with `status: "error"` (or `"timeout"` / `"aborted"`). There is no separate `error` event type — all terminal states go through `complete`.
 
 ## Exit Codes
 

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import {
 	createStructuredCompleteEvent,
-	createStructuredErrorEvent,
 	createStructuredMessageEvent,
 	createStructuredStartEvent,
 	deriveStructuredExitCode,
@@ -112,23 +111,29 @@ describe("structured-output", () => {
 		})
 	})
 
-	it("builds a structured error event with the inferred timeout status", () => {
-		const event = createStructuredErrorEvent("Timeout", {
-			status: inferStructuredStatusFromError("Timeout"),
-			exitCode: deriveStructuredExitCode("timeout"),
-			taskId: "task-123",
-			timestamp: 200,
-		})
+	it("infers timeout status from Error with name TimeoutError", () => {
+		const err = new Error("operation timed out")
+		err.name = "TimeoutError"
+		expect(inferStructuredStatusFromError(err)).toBe("timeout")
+	})
 
-		expect(event).toMatchObject({
-			schemaVersion: 1,
-			event: "error",
-			taskId: "task-123",
-			sessionId: "task-123",
-			timestamp: 200,
-			status: "timeout",
-			exitCode: 4,
-			message: "Timeout",
-		})
+	it("infers aborted status from Error with name AbortError", () => {
+		const err = new Error("signal aborted")
+		err.name = "AbortError"
+		expect(inferStructuredStatusFromError(err)).toBe("aborted")
+	})
+
+	it("infers timeout from string containing timeout", () => {
+		expect(inferStructuredStatusFromError("Timeout")).toBe("timeout")
+	})
+
+	it("infers aborted from string containing cancel", () => {
+		expect(inferStructuredStatusFromError("user cancel")).toBe("aborted")
+	})
+
+	it("returns error for unknown error types", () => {
+		expect(inferStructuredStatusFromError(new Error("something broke"))).toBe("error")
+		expect(inferStructuredStatusFromError("unknown failure")).toBe("error")
+		expect(inferStructuredStatusFromError(42)).toBe("error")
 	})
 })

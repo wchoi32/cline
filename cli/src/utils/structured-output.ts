@@ -2,7 +2,7 @@ import type { ClineMessage } from "@shared/ExtensionMessage"
 
 export const STRUCTURED_OUTPUT_SCHEMA_VERSION = 1 as const
 
-export type StructuredOutputEventType = "start" | "message" | "complete" | "error"
+export type StructuredOutputEventType = "start" | "message" | "complete"
 export type StructuredCompletionStatus = "success" | "error" | "timeout" | "aborted"
 
 export interface StructuredOutputBaseEvent {
@@ -46,14 +46,7 @@ export interface StructuredCompleteEvent extends StructuredOutputBaseEvent {
 	text?: string
 }
 
-export interface StructuredErrorEvent extends StructuredOutputBaseEvent {
-	event: "error"
-	status: Exclude<StructuredCompletionStatus, "success">
-	exitCode: number
-	message: string
-}
-
-export type StructuredEvent = StructuredStartEvent | StructuredMessageEvent | StructuredCompleteEvent | StructuredErrorEvent
+export type StructuredEvent = StructuredStartEvent | StructuredMessageEvent | StructuredCompleteEvent
 
 export function serializeStructuredEvent(event: StructuredEvent): string {
 	return JSON.stringify(event)
@@ -139,28 +132,6 @@ export function createStructuredCompleteEvent(
 		ask: message?.ask,
 		say: message?.say,
 		text: message?.text,
-	}
-}
-
-export function createStructuredErrorEvent(
-	message: string,
-	options: {
-		exitCode?: number
-		status?: Exclude<StructuredCompletionStatus, "success">
-		taskId?: string
-		timestamp?: number
-	} = {},
-): StructuredErrorEvent {
-	const status = options.status ?? "error"
-	return {
-		schemaVersion: STRUCTURED_OUTPUT_SCHEMA_VERSION,
-		event: "error",
-		timestamp: options.timestamp ?? Date.now(),
-		taskId: options.taskId,
-		sessionId: options.taskId,
-		status,
-		exitCode: options.exitCode ?? deriveStructuredExitCode(status),
-		message,
 	}
 }
 
