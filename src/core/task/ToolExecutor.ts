@@ -30,6 +30,14 @@ import { createUIHelpers } from "./tools/types/UIHelpers"
 import { ToolDisplayUtils } from "./tools/utils/ToolDisplayUtils"
 import { ToolResultUtils } from "./tools/utils/ToolResultUtils"
 
+/**
+ * Deterministic JSON serialization with sorted keys.
+ * Ensures {a:"1",b:"2"} and {b:"2",a:"1"} produce the same string.
+ */
+function stableStringify(obj: Record<string, unknown>): string {
+	return JSON.stringify(obj, Object.keys(obj).sort())
+}
+
 export function canonicalizeAttemptCompletionParams(block: ToolUse): boolean {
 	if (block.name === ClineDefaultTool.ATTEMPT && !block.params?.result && typeof block.params?.response === "string") {
 		block.params.result = block.params.response
@@ -575,24 +583,18 @@ export class ToolExecutor {
 			toolWasExecuted = true
 			this.pushToolResult(toolResult, block)
 
-			// Track the last executed tool for consecutive call detection (used by act_mode_respond)
-			this.taskState.lastToolName = block.name
-
 			// --- Doom loop detection ---
-			// Detect when the same tool is called with identical arguments repeatedly,
-			// which wastes tokens without making progress. Two-stage escalation:
-			// Stage 1 (soft): inject a warning message nudging the LLM to try something different
-			// Stage 2 (hard): trigger the existing consecutiveMistakeCount escalation path
+			// Compare BEFORE updating lastToolName/lastToolParams so we check
+			// against the previous call's values, not the current one.
 			const DOOM_LOOP_SOFT_THRESHOLD = 3
 			const DOOM_LOOP_HARD_THRESHOLD = 5
 
-			const currentParams = JSON.stringify(block.params ?? {})
+			const currentParams = stableStringify(block.params ?? {})
 			if (block.name === this.taskState.lastToolName && currentParams === this.taskState.lastToolParams) {
 				this.taskState.consecutiveIdenticalToolCount++
 			} else {
 				this.taskState.consecutiveIdenticalToolCount = 1
 			}
-			this.taskState.lastToolParams = currentParams
 
 			if (this.taskState.consecutiveIdenticalToolCount === DOOM_LOOP_SOFT_THRESHOLD) {
 				this.taskState.userMessageContent.push({
@@ -605,6 +607,10 @@ export class ToolExecutor {
 				this.taskState.consecutiveMistakeCount =
 					this.stateManager.getGlobalSettingsKey("maxConsecutiveMistakes")
 			}
+
+			// Update state AFTER comparison
+			this.taskState.lastToolName = block.name
+			this.taskState.lastToolParams = currentParams
 
 			// Check abort before running PostToolUse hook (success path)
 			if (this.taskState.abort) {

@@ -10,9 +10,17 @@ import { TaskState } from "../TaskState"
  *   Stage 1 (3 calls): warning message pushed to userMessageContent
  *   Stage 2 (5 calls): consecutiveMistakeCount set to maxConsecutiveMistakes threshold
  *
- * The actual detection runs in ToolExecutor.handleCompleteBlock() after line 579.
- * These tests validate the state tracking logic in isolation.
+ * IMPORTANT: This helper mirrors the exact production order from ToolExecutor.handleCompleteBlock():
+ *   1. Compare current call against PREVIOUS state (lastToolName, lastToolParams)
+ *   2. Update state AFTER comparison
+ * Getting this order wrong means different tools with the same params would be
+ * counted as identical, which is the bug this test structure guards against.
  */
+
+/** Deterministic serialization with sorted keys, matching production stableStringify. */
+function stableStringify(obj: Record<string, unknown>): string {
+	return JSON.stringify(obj, Object.keys(obj).sort())
+}
 
 function simulateToolCall(
 	state: TaskState,
@@ -24,15 +32,14 @@ function simulateToolCall(
 	const HARD = opts.hardThreshold ?? 5
 	const maxMistakes = opts.maxMistakes ?? 3
 
-	const currentParams = JSON.stringify(params)
+	const currentParams = stableStringify(params)
 
+	// Step 1: Compare against PREVIOUS values (before updating state)
 	if (toolName === state.lastToolName && currentParams === state.lastToolParams) {
 		state.consecutiveIdenticalToolCount++
 	} else {
 		state.consecutiveIdenticalToolCount = 1
 	}
-	state.lastToolName = toolName
-	state.lastToolParams = currentParams
 
 	if (state.consecutiveIdenticalToolCount === SOFT) {
 		state.userMessageContent.push({
@@ -44,6 +51,10 @@ function simulateToolCall(
 	if (state.consecutiveIdenticalToolCount >= HARD) {
 		state.consecutiveMistakeCount = maxMistakes
 	}
+
+	// Step 2: Update state AFTER comparison (matches production order)
+	state.lastToolName = toolName
+	state.lastToolParams = currentParams
 }
 
 describe("Doom Loop Detection", () => {
@@ -117,7 +128,7 @@ describe("Doom Loop Detection", () => {
 		const state = new TaskState()
 
 		simulateToolCall(state, "search_files", { regex: "TODO", path: "src/" })
-		state.lastToolParams.should.equal(JSON.stringify({ regex: "TODO", path: "src/" }))
+		state.lastToolParams.should.equal(stableStringify({ regex: "TODO", path: "src/" }))
 
 		simulateToolCall(state, "search_files", { regex: "FIXME", path: "src/" })
 		state.consecutiveIdenticalToolCount.should.equal(1) // different params, reset
@@ -163,5 +174,31 @@ describe("Doom Loop Detection", () => {
 		// Should trigger warning on the new streak
 		state.consecutiveIdenticalToolCount.should.equal(3)
 		state.userMessageContent.length.should.equal(1)
+	})
+
+	it("should NOT count different tools with same params as identical", () => {
+		// This guards against the ordering bug where lastToolName is updated
+		// before the comparison, making the tool-name check dead.
+		const state = new TaskState()
+
+		simulateToolCall(state, "read_file", { path: "src/main.ts" })
+		simulateToolCall(state, "search_files", { path: "src/main.ts" }) // different tool, same params
+		simulateToolCall(state, "list_files", { path: "src/main.ts" })   // different tool, same params
+
+		state.consecutiveIdenticalToolCount.should.equal(1)
+		state.userMessageContent.length.should.equal(0) // no warning
+	})
+
+	it("should treat different key orders as identical params", () => {
+		// Guards against JSON.stringify key-order sensitivity.
+		// stableStringify sorts keys, so {b:"2",a:"1"} === {a:"1",b:"2"}
+		const state = new TaskState()
+
+		simulateToolCall(state, "search_files", { regex: "TODO", path: "src/" })
+		simulateToolCall(state, "search_files", { path: "src/", regex: "TODO" }) // same params, different key order
+		simulateToolCall(state, "search_files", { regex: "TODO", path: "src/" })
+
+		state.consecutiveIdenticalToolCount.should.equal(3)
+		state.userMessageContent.length.should.equal(1) // warning triggered
 	})
 })
