@@ -10,6 +10,8 @@ const generic: ClineToolSpec = {
 	name: "save_memory",
 	description:
 		"Save durable workspace memory as a markdown file. Use this to capture stable project conventions, user preferences, or recurring instructions that should persist across sessions. Memory writes require explicit user approval.",
+	// Only available in primary agent sessions, not subagent runs
+	contextRequirements: (context) => !context.isSubagentRun,
 	parameters: [
 		{
 			name: "name",

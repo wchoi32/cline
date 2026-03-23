@@ -87,13 +87,6 @@ export class ClineToolSet {
 	public static getEnabledTools(variant: PromptVariant, context: SystemPromptContext): ClineToolSet[] {
 		const resolved: ClineToolSet[] = []
 		const requestedIds = variant.tools ? [...variant.tools] : []
-		if (
-			requestedIds.includes(ClineDefaultTool.FILE_NEW) ||
-			requestedIds.includes(ClineDefaultTool.FILE_EDIT) ||
-			requestedIds.includes(ClineDefaultTool.APPLY_PATCH)
-		) {
-			requestedIds.push(ClineDefaultTool.SAVE_MEMORY)
-		}
 		for (const id of requestedIds) {
 			const tool = ClineToolSet.getToolByNameWithFallback(id, variant.family)
 			if (tool) {

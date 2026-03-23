@@ -1,5 +1,4 @@
 import fs from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
 import { getClineHomePath } from "@core/storage/disk"
 import { fileExistsAtPath, isDirectory } from "@utils/fs"
@@ -151,7 +150,7 @@ export function getWorkspaceMemoryDirectory(cwd: string): string {
 }
 
 export function getGlobalMemoryDirectory(): string {
-	return path.join(os.homedir(), ".cline", GLOBAL_MEMORY_DIR)
+	return path.join(getClineHomePath(), GLOBAL_MEMORY_DIR)
 }
 
 export { normalizeMemoryFileName }

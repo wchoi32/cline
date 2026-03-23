@@ -44,9 +44,10 @@ describe("persistent memory", () => {
 		await fs.writeFile(path.join(homeDir, "memory", "global.md"), "global memory", "utf8")
 
 		const files = await getPersistentMemoryFiles(cwd, { homeDir })
+		// displayPath uses forward slashes (posix) for consistent display across platforms
 		expect(files.map((file) => file.displayPath)).to.deep.equal([
-			path.join(".cline", "memory", "workspace.md"),
-			path.join("~/.cline", "memory", "global.md"),
+			".cline/memory/workspace.md",
+			"~/.cline/memory/global.md",
 		])
 
 		const instructions = await getPersistentMemoryInstructions(cwd, { homeDir })
