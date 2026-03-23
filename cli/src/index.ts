@@ -870,14 +870,12 @@ program
 	.option("-n, --limit <number>", "Number of tasks to show", "10")
 	.option("-p, --page <number>", "Page number (1-based)", "1")
 	.option("--config <path>", "Path to Cline configuration directory")
-	.option("--checkpoints", "Enable checkpoints for this CLI session")
 	.action(listHistory)
 
 program
 	.command("config")
 	.description("Show current configuration")
 	.option("--config <path>", "Path to Cline configuration directory")
-	.option("--checkpoints", "Enable checkpoints for this CLI session")
 	.action(showConfig)
 
 program
@@ -890,7 +888,6 @@ program
 	.option("-v, --verbose", "Show verbose output")
 	.option("-c, --cwd <path>", "Working directory for the task")
 	.option("--config <path>", "Path to Cline configuration directory")
-	.option("--checkpoints", "Enable checkpoints for this CLI session")
 	.action(runAuth)
 
 const mcpCommand = program.command("mcp").description("Manage MCP servers")
