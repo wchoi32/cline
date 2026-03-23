@@ -279,5 +279,22 @@ describe("Thinking Trace Preservation", () => {
 			textBlock.cache_control.should.deepEqual({ type: "ephemeral" })
 			// Thinking block should not have cache_control (it doesn't support it)
 		})
+
+		it("should add cache_control to string user content", () => {
+			const messages: ClineStorageMessage[] = [
+				{
+					role: "user",
+					content: "Question",
+				},
+			]
+
+			const result = sanitizeAnthropicMessages(messages, true)
+
+			result.should.have.length(1)
+			result[0].content.should.be.an.Array()
+			const content = result[0].content as any[]
+			content[0].text.should.equal("Question")
+			content[0].cache_control.should.deepEqual({ type: "ephemeral" })
+		})
 	})
 })
