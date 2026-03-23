@@ -70,7 +70,7 @@ Run a new task with a prompt.
 
 **\--thinking** :   Enable extended thinking (1024 token budget)
 
-**\--json** :   Output messages as JSON instead of styled text
+**\--json** :   Output structured JSONL events instead of styled text
 
 **-T**, **\--taskId** *id* :   Resume an existing task by ID. The prompt argument becomes an optional follow-up message.
 
@@ -158,7 +158,7 @@ When running **cline** with just a prompt (no subcommand), these options are ava
 
 **\--thinking** :   Enable extended thinking (1024 token budget)
 
-**\--json** :   Output messages as JSON instead of styled text. Forces plain text mode.
+**\--json** :   Output structured JSONL events instead of styled text. Forces plain text mode.
 
 **-T**, **\--taskId** *id* :   Resume an existing task by ID instead of starting a new one. The prompt becomes an optional follow-up message.
 
