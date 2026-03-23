@@ -16,6 +16,7 @@ import { new_task_variants } from "./new_task"
 import { plan_mode_respond_variants } from "./plan_mode_respond"
 import { read_file_variants } from "./read_file"
 import { replace_in_file_variants } from "./replace_in_file"
+import { save_memory_variants } from "./save_memory"
 import { search_files_variants } from "./search_files"
 import { subagent_variants } from "./subagent"
 import { use_mcp_tool_variants } from "./use_mcp_tool"
@@ -44,6 +45,7 @@ export function registerClineToolSets(): void {
 		...list_files_variants,
 		...load_mcp_documentation_variants,
 		...new_task_variants,
+		...save_memory_variants,
 		...plan_mode_respond_variants,
 		...read_file_variants,
 		...replace_in_file_variants,

@@ -1,3 +1,4 @@
+import { getPersistentMemoryInstructions } from "@core/context/instructions/user-instructions/memory"
 import { SystemPromptSection } from "../templates/placeholders"
 import { TemplateEngine } from "../templates/TemplateEngine"
 import type { PromptVariant, SystemPromptContext } from "../types"
@@ -9,6 +10,7 @@ The following additional instructions are provided by the user, and should be fo
 {{CUSTOM_INSTRUCTIONS}}`
 
 export async function getUserInstructions(variant: PromptVariant, context: SystemPromptContext): Promise<string | undefined> {
+	const persistentMemoryInstructions = context.cwd ? await getPersistentMemoryInstructions(context.cwd) : undefined
 	const customInstructions = buildUserInstructions(
 		context.globalClineRulesFileInstructions,
 		context.localClineRulesFileInstructions,
@@ -18,6 +20,7 @@ export async function getUserInstructions(variant: PromptVariant, context: Syste
 		context.localAgentsRulesFileInstructions,
 		context.clineIgnoreInstructions,
 		context.preferredLanguageInstructions,
+		persistentMemoryInstructions,
 	)
 
 	if (!customInstructions) {
@@ -41,10 +44,14 @@ function buildUserInstructions(
 	localAgentsRulesFileInstructions?: string,
 	clineIgnoreInstructions?: string,
 	preferredLanguageInstructions?: string,
+	persistentMemoryInstructions?: string,
 ): string | undefined {
 	const customInstructions = []
 	if (preferredLanguageInstructions) {
 		customInstructions.push(preferredLanguageInstructions)
+	}
+	if (persistentMemoryInstructions) {
+		customInstructions.push(persistentMemoryInstructions)
 	}
 	if (globalClineRulesFileInstructions) {
 		customInstructions.push(globalClineRulesFileInstructions)
