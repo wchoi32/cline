@@ -78,6 +78,31 @@ describe("createOpenRouterStream", () => {
 		payload.should.not.have.property("max_tokens")
 	})
 
+	it("does NOT apply cache_control for non-Anthropic/non-MiniMax models", async () => {
+		const { client, create } = createClient()
+
+		await createOpenRouterStream(
+			client as any,
+			"system prompt",
+			[
+				{ role: "user", content: "first user message" },
+				{ role: "assistant", content: "assistant reply" },
+				{ role: "user", content: "second user message" },
+			] as any,
+			{
+				id: "google/gemini-2.0-flash",
+				info: createModelInfo(32_000),
+			},
+		)
+
+		const payload = create.firstCall.args[0] as any
+		// System prompt should be a plain string, not an array with cache_control
+		payload.messages[0].content.should.equal("system prompt")
+		// User messages should be plain strings, not arrays with cache_control
+		payload.messages[1].content.should.equal("first user message")
+		payload.messages[3].content.should.equal("second user message")
+	})
+
 	it("applies prompt cache control to the system prompt and the last two user messages for Anthropic models", async () => {
 		const { client, create } = createClient()
 
