@@ -29,6 +29,7 @@ export enum ClineDefaultTool {
 	SUMMARIZE_TASK = "summarize_task",
 	REPORT_BUG = "report_bug",
 	NEW_RULE = "new_rule",
+	SAVE_MEMORY = "save_memory",
 	APPLY_PATCH = "apply_patch",
 	GENERATE_EXPLANATION = "generate_explanation",
 	USE_SKILL = "use_skill",
