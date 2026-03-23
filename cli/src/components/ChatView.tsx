@@ -858,7 +858,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
 					}),
 				)
 			} catch (error) {
+				const errorMsg = error instanceof Error ? error.message : String(error)
 				Logger.error("[ChatView] Failed to restore checkpoint from CLI:", error)
+				process.stderr.write(`\nCheckpoint restore failed: ${errorMsg}\n`)
 			}
 		},
 		[ctrl],

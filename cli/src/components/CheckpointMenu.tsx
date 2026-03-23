@@ -132,11 +132,19 @@ export const CheckpointMenu: React.FC<CheckpointMenuProps> = ({ messages, onSele
 	)
 
 	if (checkpoints.length === 0) {
+		// Auto-close after a short delay if raw mode is not available (Escape won't work)
+		React.useEffect(() => {
+			if (!isRawModeSupported) {
+				const timer = setTimeout(() => onCancel(), 3000)
+				return () => clearTimeout(timer)
+			}
+		}, [isRawModeSupported, onCancel])
+
 		return (
 			<Box borderColor="yellow" borderStyle="round" flexDirection="column" marginTop={1} paddingLeft={1} paddingRight={1}>
 				<Text color="yellow">No checkpoints available</Text>
 				<Text color="gray">Checkpoints are created at task completion points</Text>
-				<Text color="gray">Press Escape to close</Text>
+				<Text color="gray">{isRawModeSupported ? "Press Escape to close" : "Closing automatically..."}</Text>
 			</Box>
 		)
 	}
