@@ -80,6 +80,68 @@ Instructions here`)
 			expect(skills[0].source).to.equal("global")
 		})
 
+		it("should parse extended metadata fields from frontmatter", async () => {
+			const skillDir = path.join(GLOBAL_SKILLS_DIR, "metadata-skill")
+			const skillMdPath = path.join(skillDir, "SKILL.md")
+
+			fileExistsStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			fileExistsStub.withArgs(skillMdPath).resolves(true)
+			isDirectoryStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			readdirStub.withArgs(GLOBAL_SKILLS_DIR).resolves(["metadata-skill"])
+			statStub.withArgs(skillDir).resolves({ isDirectory: () => true })
+			readFileStub.withArgs(skillMdPath, "utf-8").resolves(`---
+name: metadata-skill
+description: Analyze failures and propose targeted tests
+version: 2
+tags:
+  - testing
+  - diagnostics
+tools:
+  - read_file
+  - search_files
+resources:
+  - memory:test-conventions
+invocation:
+  manual: false
+  auto: true
+---
+Instructions here`)
+
+			const skills = await discoverSkills(TEST_CWD)
+
+			expect(skills).to.have.lengthOf(1)
+			expect(skills[0]).to.deep.include({
+				name: "metadata-skill",
+				description: "Analyze failures and propose targeted tests",
+				version: 2,
+				tags: ["testing", "diagnostics"],
+				tools: ["read_file", "search_files"],
+				resources: ["memory:test-conventions"],
+				invocation: { manual: false, auto: true },
+			})
+		})
+
+		it("should default invocation metadata when omitted", async () => {
+			const skillDir = path.join(GLOBAL_SKILLS_DIR, "default-invocation")
+			const skillMdPath = path.join(skillDir, "SKILL.md")
+
+			fileExistsStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			fileExistsStub.withArgs(skillMdPath).resolves(true)
+			isDirectoryStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			readdirStub.withArgs(GLOBAL_SKILLS_DIR).resolves(["default-invocation"])
+			statStub.withArgs(skillDir).resolves({ isDirectory: () => true })
+			readFileStub.withArgs(skillMdPath, "utf-8").resolves(`---
+name: default-invocation
+description: Test defaults
+---
+Content`)
+
+			const skills = await discoverSkills(TEST_CWD)
+
+			expect(skills).to.have.lengthOf(1)
+			expect(skills[0].invocation).to.deep.equal({ manual: true, auto: false })
+		})
+
 		it("should discover skills from project .clinerules/skills directory", async () => {
 			const projectSkillsDir = path.join(TEST_CWD, ".clinerules", "skills")
 			const skillDir = path.join(projectSkillsDir, "explaining-code")
