@@ -86,6 +86,15 @@ export const CheckpointMenu: React.FC<CheckpointMenuProps> = ({ messages, onSele
 	const [selectedRestoreType, setSelectedRestoreType] = useState(0)
 	const [stage, setStage] = useState<"checkpoint" | "restoreType">("checkpoint")
 
+	// Auto-close empty checkpoint list when raw mode unavailable (Escape won't work).
+	// Must be declared before any conditional returns to satisfy React rules of hooks.
+	React.useEffect(() => {
+		if (checkpoints.length === 0 && !isRawModeSupported) {
+			const timer = setTimeout(() => onCancel(), 3000)
+			return () => clearTimeout(timer)
+		}
+	}, [checkpoints.length, isRawModeSupported, onCancel])
+
 	useInput(
 		(input, key) => {
 			if (key.escape) {
@@ -132,14 +141,6 @@ export const CheckpointMenu: React.FC<CheckpointMenuProps> = ({ messages, onSele
 	)
 
 	if (checkpoints.length === 0) {
-		// Auto-close after a short delay if raw mode is not available (Escape won't work)
-		React.useEffect(() => {
-			if (!isRawModeSupported) {
-				const timer = setTimeout(() => onCancel(), 3000)
-				return () => clearTimeout(timer)
-			}
-		}, [isRawModeSupported, onCancel])
-
 		return (
 			<Box borderColor="yellow" borderStyle="round" flexDirection="column" marginTop={1} paddingLeft={1} paddingRight={1}>
 				<Text color="yellow">No checkpoints available</Text>
