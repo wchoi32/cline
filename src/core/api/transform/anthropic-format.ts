@@ -1,5 +1,6 @@
 import { Anthropic } from "@anthropic-ai/sdk"
 import { ClineStorageMessage, convertClineStorageToAnthropicMessage } from "@/shared/messages/content"
+import { addEphemeralCacheControlToLastMatchingBlock, makeEphemeralTextBlock } from "./cache-control"
 
 /**
  * Converts Cline storage messages to Anthropic API format with optional cache control.
@@ -42,12 +43,6 @@ export function sanitizeAnthropicMessages(
 	})
 }
 
-const isThinkingBlock = (
-	block: Anthropic.ContentBlockParam,
-): block is Anthropic.Messages.ThinkingBlockParam | Anthropic.Messages.RedactedThinkingBlockParam => {
-	return block.type === "thinking" || block.type === "redacted_thinking"
-}
-
 /**
  * Adds ephemeral cache control to the last content block of a message.
  * Returns a new message object without mutating the original.
@@ -60,31 +55,14 @@ function addCacheControl(message: Anthropic.MessageParam): Anthropic.MessagePara
 	if (typeof message.content === "string") {
 		return {
 			...message,
-			content: [
-				{
-					type: "text",
-					text: message.content,
-					cache_control: { type: "ephemeral" },
-				} satisfies Anthropic.TextBlockParam,
-			],
+			content: [makeEphemeralTextBlock(message.content)],
 		}
 	}
 
 	// Handle array content - add cache control to the last block
-	const content = [...message.content]
-	const lastIndex = content.length - 1
-
-	if (lastIndex >= 0) {
-		const lastBlock = content[lastIndex]
-
-		// Only add cache_control to block types that support it (not ThinkingBlockParam)
-		if (!isThinkingBlock(lastBlock)) {
-			content[lastIndex] = {
-				...lastBlock,
-				cache_control: { type: "ephemeral" },
-			} satisfies Anthropic.ContentBlockParam
-		}
-	}
+	const content = addEphemeralCacheControlToLastMatchingBlock(message.content, (block) => {
+		return block.type !== "thinking" && block.type !== "redacted_thinking"
+	})
 
 	return { ...message, content }
 }
