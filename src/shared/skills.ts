@@ -21,7 +21,8 @@ export interface SkillMetadata {
 	tags?: string[]
 	tools?: string[]
 	resources?: string[]
-	invocation?: SkillInvocationMetadata
+	/** Always set by normalizeSkillMetadata. Defaults to { manual: true, auto: false }. */
+	invocation: SkillInvocationMetadata
 }
 
 /**

@@ -32,8 +32,8 @@ function toStringArray(value: unknown): string[] | undefined {
 	return values.length > 0 ? values : undefined
 }
 
-function toFiniteNumber(value: unknown): number | undefined {
-	return typeof value === "number" && Number.isFinite(value) ? value : undefined
+function toPositiveInteger(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined
 }
 
 function normalizeInvocation(value: unknown): SkillMetadata["invocation"] {
@@ -54,7 +54,7 @@ function normalizeSkillMetadata(
 	skillName: string,
 	source: "global" | "project",
 ): SkillMetadata {
-	const version = toFiniteNumber(frontmatter.version)
+	const version = toPositiveInteger(frontmatter.version)
 	const tags = toStringArray(frontmatter.tags)
 	const tools = toStringArray(frontmatter.tools)
 	const resources = toStringArray(frontmatter.resources)

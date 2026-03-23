@@ -367,6 +367,144 @@ Content`)
 	})
 
 	describe("Metadata Validation", () => {
+		it("should handle tags as a single string (non-array)", async () => {
+			const skillDir = path.join(GLOBAL_SKILLS_DIR, "single-tag")
+			const skillMdPath = path.join(skillDir, "SKILL.md")
+
+			fileExistsStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			fileExistsStub.withArgs(skillMdPath).resolves(true)
+			isDirectoryStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			readdirStub.withArgs(GLOBAL_SKILLS_DIR).resolves(["single-tag"])
+			statStub.withArgs(skillDir).resolves({ isDirectory: () => true })
+			readFileStub.withArgs(skillMdPath, "utf-8").resolves(`---
+name: single-tag
+description: Has a single tag string
+tags: testing
+---
+Content`)
+
+			const skills = await discoverSkills(TEST_CWD)
+
+			expect(skills).to.have.lengthOf(1)
+			expect(skills[0].tags).to.deep.equal(["testing"])
+		})
+
+		it("should ignore non-string version", async () => {
+			const skillDir = path.join(GLOBAL_SKILLS_DIR, "bad-version")
+			const skillMdPath = path.join(skillDir, "SKILL.md")
+
+			fileExistsStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			fileExistsStub.withArgs(skillMdPath).resolves(true)
+			isDirectoryStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			readdirStub.withArgs(GLOBAL_SKILLS_DIR).resolves(["bad-version"])
+			statStub.withArgs(skillDir).resolves({ isDirectory: () => true })
+			readFileStub.withArgs(skillMdPath, "utf-8").resolves(`---
+name: bad-version
+description: Has invalid version
+version: not-a-number
+---
+Content`)
+
+			const skills = await discoverSkills(TEST_CWD)
+
+			expect(skills).to.have.lengthOf(1)
+			expect(skills[0]).to.not.have.property("version")
+		})
+
+		it("should reject negative or fractional version", async () => {
+			const skillDir = path.join(GLOBAL_SKILLS_DIR, "neg-version")
+			const skillMdPath = path.join(skillDir, "SKILL.md")
+
+			fileExistsStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			fileExistsStub.withArgs(skillMdPath).resolves(true)
+			isDirectoryStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			readdirStub.withArgs(GLOBAL_SKILLS_DIR).resolves(["neg-version"])
+			statStub.withArgs(skillDir).resolves({ isDirectory: () => true })
+			readFileStub.withArgs(skillMdPath, "utf-8").resolves(`---
+name: neg-version
+description: Has negative version
+version: -1
+---
+Content`)
+
+			const skills = await discoverSkills(TEST_CWD)
+
+			expect(skills).to.have.lengthOf(1)
+			expect(skills[0]).to.not.have.property("version")
+		})
+
+		it("should filter non-string items from tools array", async () => {
+			const skillDir = path.join(GLOBAL_SKILLS_DIR, "mixed-tools")
+			const skillMdPath = path.join(skillDir, "SKILL.md")
+
+			fileExistsStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			fileExistsStub.withArgs(skillMdPath).resolves(true)
+			isDirectoryStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			readdirStub.withArgs(GLOBAL_SKILLS_DIR).resolves(["mixed-tools"])
+			statStub.withArgs(skillDir).resolves({ isDirectory: () => true })
+			readFileStub.withArgs(skillMdPath, "utf-8").resolves(`---
+name: mixed-tools
+description: Has mixed tool types
+tools:
+  - read_file
+  - 123
+  - search_files
+---
+Content`)
+
+			const skills = await discoverSkills(TEST_CWD)
+
+			expect(skills).to.have.lengthOf(1)
+			// Should only contain the string items
+			expect(skills[0].tools).to.deep.equal(["read_file", "search_files"])
+		})
+
+		it("should default invocation when set to non-object value", async () => {
+			const skillDir = path.join(GLOBAL_SKILLS_DIR, "bad-invocation")
+			const skillMdPath = path.join(skillDir, "SKILL.md")
+
+			fileExistsStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			fileExistsStub.withArgs(skillMdPath).resolves(true)
+			isDirectoryStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			readdirStub.withArgs(GLOBAL_SKILLS_DIR).resolves(["bad-invocation"])
+			statStub.withArgs(skillDir).resolves({ isDirectory: () => true })
+			readFileStub.withArgs(skillMdPath, "utf-8").resolves(`---
+name: bad-invocation
+description: Has invalid invocation
+invocation: just-a-string
+---
+Content`)
+
+			const skills = await discoverSkills(TEST_CWD)
+
+			expect(skills).to.have.lengthOf(1)
+			expect(skills[0].invocation).to.deep.equal({ manual: true, auto: false })
+		})
+
+		it("should default invocation booleans when set to non-boolean values", async () => {
+			const skillDir = path.join(GLOBAL_SKILLS_DIR, "bad-bools")
+			const skillMdPath = path.join(skillDir, "SKILL.md")
+
+			fileExistsStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			fileExistsStub.withArgs(skillMdPath).resolves(true)
+			isDirectoryStub.withArgs(GLOBAL_SKILLS_DIR).resolves(true)
+			readdirStub.withArgs(GLOBAL_SKILLS_DIR).resolves(["bad-bools"])
+			statStub.withArgs(skillDir).resolves({ isDirectory: () => true })
+			readFileStub.withArgs(skillMdPath, "utf-8").resolves(`---
+name: bad-bools
+description: Has non-boolean invocation values
+invocation:
+  manual: yes
+  auto: 1
+---
+Content`)
+
+			const skills = await discoverSkills(TEST_CWD)
+
+			expect(skills).to.have.lengthOf(1)
+			expect(skills[0].invocation).to.deep.equal({ manual: true, auto: false })
+		})
+
 		it("should reject skill with missing name field", async () => {
 			const skillDir = path.join(GLOBAL_SKILLS_DIR, "bad-skill")
 			const skillMdPath = path.join(skillDir, "SKILL.md")
