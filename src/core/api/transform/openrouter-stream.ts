@@ -78,7 +78,9 @@ export async function createOpenRouterStream(
 					lastTextPart = { type: "text", text: "..." }
 					msg.content.push(lastTextPart)
 				}
-				msg.content = addEphemeralCacheControlToLastMatchingBlock(msg.content, (part) => part === lastTextPart)
+				// Uses reference equality: lastTextPart is either .pop()'d from msg.content
+			// or freshly pushed into it, so the identity check is safe here.
+			msg.content = addEphemeralCacheControlToLastMatchingBlock(msg.content, (part) => part === lastTextPart)
 			}
 		})
 	}
