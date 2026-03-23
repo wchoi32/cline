@@ -34,6 +34,7 @@ export interface StructuredCompleteEvent extends StructuredOutputBaseEvent {
 	status: StructuredCompletionStatus
 	exitCode: number
 	result?: string
+	error?: string
 	messageType?: ClineMessage["type"]
 	ask?: ClineMessage["ask"]
 	say?: ClineMessage["say"]
@@ -110,6 +111,7 @@ export function createStructuredCompleteEvent(
 		status: StructuredCompletionStatus
 		exitCode: number
 		result?: string
+		errorMessage?: string
 		message?: ClineMessage
 		taskId?: string
 		timestamp?: number
@@ -126,7 +128,8 @@ export function createStructuredCompleteEvent(
 		sessionId: options.taskId,
 		status: options.status,
 		exitCode: options.exitCode,
-		result: options.result ?? message?.text,
+		result: options.status === "success" ? options.result ?? message?.text : undefined,
+		error: options.status === "success" ? undefined : options.errorMessage ?? message?.text,
 		messageType: message?.type,
 		ask: message?.ask,
 		say: message?.say,

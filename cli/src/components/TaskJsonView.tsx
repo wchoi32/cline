@@ -89,14 +89,15 @@ export const TaskJsonView: React.FC<TaskJsonViewProps> = ({ taskId: _taskId, ver
 			const isError = completionMsg?.say === "error" || completionMsg?.ask === "api_req_failed"
 
 			// Output completion status
-			outputJson(
-				createStructuredCompleteEvent({
-					status: isError ? "error" : "success",
-					exitCode: deriveStructuredExitCode(isError ? "error" : "success"),
-					message: completionMsg ?? undefined,
-					taskId: _taskId,
-				}),
-			)
+				outputJson(
+					createStructuredCompleteEvent({
+						status: isError ? "error" : "success",
+						exitCode: deriveStructuredExitCode(isError ? "error" : "success"),
+						errorMessage: isError ? completionMsg?.text : undefined,
+						message: completionMsg ?? undefined,
+						taskId: _taskId,
+					}),
+				)
 
 			if (isError) {
 				onError?.()

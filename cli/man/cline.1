@@ -188,30 +188,47 @@ Forces plain text mode.
 task by ID instead of starting a new one.
 The prompt becomes an optional follow\-up message.
 .SH JSON OUTPUT FORMAT
-When using \f[B]\-\-json\f[R], each message is output as a JSON object
-with these fields:
+When using \f[B]\-\-json\f[R], stdout is emitted as structured JSONL
+records with a stable envelope:
 .PP
-\f[B]Required fields:\f[R]
+\f[B]Envelope fields:\f[R]
 .IP \(bu 2
-\f[B]type\f[R]: \(lqask\(rq or \(lqsay\(rq
+\f[B]schemaVersion\f[R]: currently \f[C]1\f[R]
 .IP \(bu 2
-\f[B]text\f[R]: message text
+\f[B]event\f[R]: \f[C]"start"\f[R], \f[C]"message"\f[R], or
+\f[C]"complete"\f[R]
 .IP \(bu 2
-\f[B]ts\f[R]: Unix epoch timestamp in milliseconds
+\f[B]timestamp\f[R]: Unix epoch timestamp in milliseconds
 .PP
-\f[B]Optional fields:\f[R]
+\f[B]taskId\f[R]: task identifier when available
 .IP \(bu 2
-\f[B]reasoning\f[R]: reasoning text
+\f[B]sessionId\f[R]: currently the same value as \f[C]taskId\f[R]
+.PP
+\f[B]Message events (\f[C]event: "message"\f[R]) include:\f[R]
 .IP \(bu 2
-\f[B]say\f[R]: say subtype (when type is \(lqsay\(rq)
+\f[B]role\f[R]: \f[C]"user"\f[R], \f[C]"assistant"\f[R], or
+\f[C]"system"\f[R]
 .IP \(bu 2
-\f[B]ask\f[R]: ask subtype (when type is \(lqask\(rq)
+\f[B]messageType\f[R]: raw Cline message type (\f[C]"ask"\f[R] or
+\f[C]"say"\f[R])
 .IP \(bu 2
-\f[B]partial\f[R]: streaming flag
+the original Cline message payload fields such as \f[B]type\f[R],
+\f[B]say\f[R], \f[B]ask\f[R], \f[B]text\f[R], \f[B]ts\f[R],
+\f[B]reasoning\f[R], \f[B]images\f[R], and \f[B]files\f[R]
+.PP
+\f[B]Completion events (\f[C]event: "complete"\f[R]) include:\f[R]
 .IP \(bu 2
-\f[B]images\f[R]: list of image URIs
+\f[B]status\f[R]: \f[C]"success"\f[R], \f[C]"error"\f[R],
+\f[C]"timeout"\f[R], or \f[C]"aborted"\f[R]
 .IP \(bu 2
-\f[B]files\f[R]: list of file paths
+\f[B]exitCode\f[R]: normalized process exit code
+.IP \(bu 2
+\f[B]result\f[R]: completion text for successful runs when available
+.IP \(bu 2
+\f[B]error\f[R]: terminal error text for failed runs when available
+.IP \(bu 2
+\f[B]messageType\f[R], \f[B]say\f[R], \f[B]ask\f[R], \f[B]text\f[R]:
+copied from the terminal Cline message when present
 .SH EXAMPLES
 .SS Basic Usage
 .IP

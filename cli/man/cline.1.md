@@ -166,22 +166,29 @@ When running **cline** with just a prompt (no subcommand), these options are ava
 
 # JSON OUTPUT FORMAT
 
-When using **\--json**, each message is output as a JSON object with these fields:
+When using **\--json**, stdout is emitted as structured JSONL records with a stable envelope:
 
-**Required fields:**
+**Envelope fields:**
 
-- **type**: "ask" or "say"
-- **text**: message text
-- **ts**: Unix epoch timestamp in milliseconds
+- **schemaVersion**: currently `1`
+- **event**: `"start"`, `"message"`, or `"complete"`
+- **timestamp**: Unix epoch timestamp in milliseconds
+- **taskId**: task identifier when available
+- **sessionId**: currently the same value as `taskId`
 
-**Optional fields:**
+**Message events (`event: "message"`) include:**
 
-- **reasoning**: reasoning text
-- **say**: say subtype (when type is "say")
-- **ask**: ask subtype (when type is "ask")
-- **partial**: streaming flag
-- **images**: list of image URIs
-- **files**: list of file paths
+- **role**: `"user"`, `"assistant"`, or `"system"`
+- **messageType**: raw Cline message type (`"ask"` or `"say"`)
+- the original Cline message payload fields such as **type**, **say**, **ask**, **text**, **ts**, **reasoning**, **images**, and **files**
+
+**Completion events (`event: "complete"`) include:**
+
+- **status**: `"success"`, `"error"`, `"timeout"`, or `"aborted"`
+- **exitCode**: normalized process exit code
+- **result**: completion text for successful runs when available
+- **error**: terminal error text for failed runs when available
+- **messageType**, **say**, **ask**, **text**: copied from the terminal Cline message when present
 
 # EXAMPLES
 

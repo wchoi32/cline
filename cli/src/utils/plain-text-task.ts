@@ -19,7 +19,6 @@ import { subscribeToState } from "@/core/controller/state/subscribeToState"
 import { showTaskWithId } from "@/core/controller/task/showTaskWithId"
 import {
 	createStructuredCompleteEvent,
-	createStructuredErrorEvent,
 	createStructuredMessageEvent,
 	deriveStructuredExitCode,
 	inferStructuredStatusFromError,
@@ -101,23 +100,12 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<P
 
 		emittedCompletionEvent = true
 		const taskId = controller.task?.taskId
-		if (status === "success") {
-			writeStructuredEvent(
-				createStructuredCompleteEvent({
-					status,
-					exitCode: deriveStructuredExitCode(status),
-					message,
-					taskId,
-				}),
-				(line) => process.stdout.write(line),
-			)
-			return
-		}
-
 		writeStructuredEvent(
-			createStructuredErrorEvent(errorMessage || message?.text || "Task failed", {
-				exitCode: deriveStructuredExitCode(status),
+			createStructuredCompleteEvent({
 				status,
+				exitCode: deriveStructuredExitCode(status),
+				errorMessage: status === "success" ? undefined : errorMessage || message?.text || "Task failed",
+				message,
 				taskId,
 			}),
 			(line) => process.stdout.write(line),

@@ -80,6 +80,38 @@ describe("structured-output", () => {
 		})
 	})
 
+	it("builds a structured completion event with error details for terminal failures", () => {
+		const message = {
+			ts: 101,
+			type: "say",
+			say: "error",
+			text: "request failed",
+		} satisfies ClineMessage
+
+		const event = createStructuredCompleteEvent({
+			status: "error",
+			exitCode: deriveStructuredExitCode("error"),
+			errorMessage: "request failed",
+			message,
+			taskId: "task-123",
+			timestamp: 102,
+		})
+
+		expect(event).toMatchObject({
+			schemaVersion: 1,
+			event: "complete",
+			taskId: "task-123",
+			sessionId: "task-123",
+			timestamp: 102,
+			status: "error",
+			exitCode: 1,
+			say: "error",
+			text: "request failed",
+			error: "request failed",
+			result: undefined,
+		})
+	})
+
 	it("builds a structured error event with the inferred timeout status", () => {
 		const event = createStructuredErrorEvent("Timeout", {
 			status: inferStructuredStatusFromError("Timeout"),
