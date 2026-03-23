@@ -147,4 +147,4 @@ cline "refactor utils" --json | jq 'select(.event == "message" and .say == "tool
 
 ## Differences from Raw ClineMessage
 
-When `--json` was first introduced, it emitted raw `ClineMessage` objects without an envelope. The structured output format wraps these in a versioned envelope with lifecycle events (`start`, `complete`, `error`). All original `ClineMessage` fields are preserved in `message` events for backward compatibility, but the envelope fields always take precedence.
+When `--json` was first introduced, it emitted raw `ClineMessage` objects without an envelope. The structured output format wraps these in a versioned envelope with lifecycle events (`start`, `message`, `complete`). All original `ClineMessage` fields are preserved in `message` events for backward compatibility, but the envelope fields always take precedence.
