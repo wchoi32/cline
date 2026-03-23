@@ -97,4 +97,10 @@ export const CLI_ONLY_COMMANDS: SlashCommand[] = [
 		section: "default",
 		cliCompatible: true,
 	},
+	{
+		name: "checkpoints",
+		description: "Browse and restore task checkpoints",
+		section: "default",
+		cliCompatible: true,
+	},
 ]

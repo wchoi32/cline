@@ -107,6 +107,7 @@ import { combineHookSequences } from "@shared/combineHookSequences"
 import type { ClineAsk, ClineMessage } from "@shared/ExtensionMessage"
 import { getApiMetrics, getLastApiReqTotalTokens } from "@shared/getApiMetrics"
 import { EmptyRequest, StringRequest } from "@shared/proto/cline/common"
+import { CheckpointRestoreRequest } from "@shared/proto/cline/checkpoints"
 import type { SlashCommandInfo } from "@shared/proto/cline/slash"
 import { getProviderDefaultModelId, getProviderModelIdKey } from "@shared/storage"
 import type { Mode } from "@shared/storage/types"
@@ -114,6 +115,7 @@ import { execSync } from "child_process"
 import { Box, Static, Text, useApp, useInput } from "ink"
 // biome-ignore lint/style/useImportType: JSX requires React as a value (jsx: "react" in tsconfig)
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { checkpointRestore } from "@/core/controller/checkpoints/checkpointRestore"
 import { getAvailableSlashCommands } from "@/core/controller/slash/getAvailableSlashCommands"
 import { showTaskWithId } from "@/core/controller/task/showTaskWithId"
 import { StateManager } from "@/core/storage/StateManager"
@@ -127,6 +129,7 @@ import { useIsSpinnerActive } from "../hooks/useStateSubscriber"
 import { findWordEnd, findWordStart, useTextInput } from "../hooks/useTextInput"
 import { moveCursorDown, moveCursorUp } from "../utils/cursor"
 import { setTerminalTitle } from "../utils/display"
+import { CheckpointMenu } from "./CheckpointMenu"
 import {
 	checkAndWarnRipgrepMissing,
 	extractMentionQuery,
@@ -418,6 +421,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 	const [activePanel, setActivePanel] = useState<
 		| { type: "settings"; initialMode?: "model-picker" | "featured-models"; initialModelKey?: "actModelId" | "planModelId" }
 		| { type: "history" }
+		| { type: "checkpoints" }
 		| { type: "help" }
 		| { type: "skills" }
 		| null
@@ -838,6 +842,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
 		}
 	}, [ctrl])
 
+	const handleCheckpointRestore = useCallback(
+		async (messageTs: number, restoreType: "task" | "workspace" | "taskAndWorkspace") => {
+			setActivePanel(null)
+			if (!ctrl?.task) {
+				return
+			}
+
+			try {
+				await checkpointRestore(
+					ctrl,
+					CheckpointRestoreRequest.create({
+						number: messageTs,
+						restoreType,
+					}),
+				)
+			} catch (error) {
+				Logger.error("[ChatView] Failed to restore checkpoint from CLI:", error)
+			}
+		},
+		[ctrl],
+	)
+
 	// Handle exit - hide input first, show summary, then exit Ink app gracefully
 	const handleExit = useCallback(() => {
 		setIsExiting(true)
@@ -886,6 +912,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
 			if (commandName === "history") {
 				setActivePanel({ type: "history" })
+				setTextInput("")
+				setCursorPos(0)
+				setSelectedSlashIndex(0)
+				setSlashMenuDismissed(true)
+				return true
+			}
+
+			if (commandName === "checkpoints") {
+				setActivePanel({ type: "checkpoints" })
 				setTextInput("")
 				setCursorPos(0)
 				setSelectedSlashIndex(0)
@@ -1579,6 +1614,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
 						controller={ctrl}
 						onClose={() => setActivePanel(null)}
 						onSelectTask={() => setActivePanel(null)}
+					/>
+				)}
+
+				{/* Checkpoints panel */}
+				{activePanel?.type === "checkpoints" && (
+					<CheckpointMenu
+						messages={(taskState.clineMessages || []) as ClineMessage[]}
+						onCancel={() => setActivePanel(null)}
+						onSelect={handleCheckpointRestore}
 					/>
 				)}
 

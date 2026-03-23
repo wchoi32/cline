@@ -27,7 +27,7 @@ interface CheckpointMenuProps {
 /**
  * Extract checkpoint options from messages
  */
-function getCheckpointOptions(messages: ClineMessage[]): CheckpointOption[] {
+export function getCheckpointOptions(messages: ClineMessage[]): CheckpointOption[] {
 	const options: CheckpointOption[] = []
 
 	for (const msg of messages) {
@@ -48,7 +48,7 @@ function getCheckpointOptions(messages: ClineMessage[]): CheckpointOption[] {
 /**
  * Get a human-readable label for a checkpoint
  */
-function getCheckpointLabel(msg: ClineMessage): string {
+export function getCheckpointLabel(msg: ClineMessage): string {
 	if (msg.say === "completion_result") {
 		return "Task completion"
 	}

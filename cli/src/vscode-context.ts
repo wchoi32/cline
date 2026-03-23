@@ -17,22 +17,6 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 /**
- * CLI-specific state overrides.
- * These values are always returned regardless of what's stored,
- * and writes to these keys are silently ignored.
- */
-const CLI_STATE_OVERRIDES: Record<string, any> = {
-	// CLI always uses background execution, not VSCode terminal
-	vscodeTerminalExecutionMode: "backgroundExec",
-	backgroundEditEnabled: true,
-	multiRootEnabled: false,
-	enableCheckpointsSetting: false,
-	browserSettings: {
-		disableToolUse: true,
-	},
-}
-
-/**
  * Memento adapter that wraps a ClineFileStorage with optional key overrides.
  * Used for globalState where CLI needs to inject hardcoded overrides.
  */
@@ -81,6 +65,8 @@ export interface CliContextConfig {
 	clineDir?: string
 	/** The workspace directory being worked in (used to compute workspace storage hash) */
 	workspaceDir?: string
+	/** Optional session-level checkpoint toggle for CLI task sessions. */
+	enableCheckpointsSetting?: boolean
 }
 
 export interface CliContextResult {
@@ -89,6 +75,24 @@ export interface CliContextResult {
 	DATA_DIR: string
 	EXTENSION_DIR: string
 	WORKSPACE_STORAGE_DIR: string
+}
+
+export function getCliStateOverrides(config: CliContextConfig = {}): Record<string, any> {
+	const overrides: Record<string, any> = {
+		// CLI always uses background execution, not VSCode terminal
+		vscodeTerminalExecutionMode: "backgroundExec",
+		backgroundEditEnabled: true,
+		multiRootEnabled: false,
+		browserSettings: {
+			disableToolUse: true,
+		},
+	}
+
+	if (config.enableCheckpointsSetting !== undefined) {
+		overrides.enableCheckpointsSetting = config.enableCheckpointsSetting
+	}
+
+	return overrides
 }
 
 /**
@@ -111,7 +115,7 @@ export function initializeCliContext(config: CliContextConfig = {}): CliContextR
 	storageContext = {
 		...storageContext,
 		// Storage — delegates to storageContext stores (with CLI overrides for globalState)
-		globalState: new MementoAdapter(storageContext.globalState, CLI_STATE_OVERRIDES),
+		globalState: new MementoAdapter(storageContext.globalState, getCliStateOverrides(config)),
 	}
 
 	const DATA_DIR = storageContext.dataDir
