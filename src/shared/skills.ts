@@ -21,8 +21,12 @@ export interface SkillMetadata {
 	tags?: string[]
 	tools?: string[]
 	resources?: string[]
-	/** Always set by normalizeSkillMetadata. Defaults to { manual: true, auto: false }. */
-	invocation: SkillInvocationMetadata
+	/**
+	 * Execution metadata. Optional on the interface for backward compatibility,
+	 * but always set by normalizeSkillMetadata() during discovery.
+	 * Defaults to { manual: true, auto: false } when omitted from frontmatter.
+	 */
+	invocation?: SkillInvocationMetadata
 }
 
 /**

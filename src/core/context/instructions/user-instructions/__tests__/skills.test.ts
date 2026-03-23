@@ -482,6 +482,8 @@ Content`)
 		})
 
 		it("should default invocation booleans when set to non-boolean values", async () => {
+			// Use numeric and string values that are unambiguously non-boolean
+			// (YAML 1.1 parses "yes"/"no" as booleans, so avoid those)
 			const skillDir = path.join(GLOBAL_SKILLS_DIR, "bad-bools")
 			const skillMdPath = path.join(skillDir, "SKILL.md")
 
@@ -494,8 +496,8 @@ Content`)
 name: bad-bools
 description: Has non-boolean invocation values
 invocation:
-  manual: yes
-  auto: 1
+  manual: 42
+  auto: "enabled"
 ---
 Content`)
 
