@@ -44,7 +44,7 @@ export class TaskState {
 	didAlreadyUseTool = false
 	didEditFile = false
 	lastToolName = "" // Track last tool used for consecutive call detection
-	lastToolParams = "" // JSON.stringify of last tool's params for doom loop detection
+	lastToolParams = "" // Canonical signature of last tool's params (via stableStringify)
 	consecutiveIdenticalToolCount = 0 // Consecutive calls with identical tool name + params
 
 	// File read deduplication cache - prevents the model from endlessly reading the same files

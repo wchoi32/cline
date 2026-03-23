@@ -1,61 +1,70 @@
 import { describe, it } from "mocha"
 import "should"
+import { checkDoomLoop, DOOM_LOOP_SOFT_THRESHOLD, stableStringify, toolCallSignature } from "../doom-loop"
 import { TaskState } from "../TaskState"
 
 /**
- * Tests for doom loop detection logic.
+ * Tests for doom loop detection.
  *
- * The detection tracks consecutive identical tool calls (same name + same params)
- * and escalates in two stages:
- *   Stage 1 (3 calls): warning message pushed to userMessageContent
- *   Stage 2 (5 calls): consecutiveMistakeCount set to maxConsecutiveMistakes threshold
- *
- * IMPORTANT: This helper mirrors the exact production order from ToolExecutor.handleCompleteBlock():
- *   1. Compare current call against PREVIOUS state (lastToolName, lastToolParams)
- *   2. Update state AFTER comparison
- * Getting this order wrong means different tools with the same params would be
- * counted as identical, which is the bug this test structure guards against.
+ * These tests exercise the shared helpers from doom-loop.ts directly —
+ * the same functions used by ToolExecutor in production. No duplicated
+ * algorithm.
  */
 
-/** Deterministic serialization with sorted keys, matching production stableStringify. */
-function stableStringify(obj: Record<string, unknown>): string {
-	return JSON.stringify(obj, Object.keys(obj).sort())
-}
+/** Simulate a complete tool call cycle matching production order in ToolExecutor. */
+function simulateToolCall(state: TaskState, toolName: string, params: Record<string, unknown>, maxMistakes = 3) {
+	const sig = toolCallSignature(params)
 
-function simulateToolCall(
-	state: TaskState,
-	toolName: string,
-	params: Record<string, string>,
-	opts: { softThreshold?: number; hardThreshold?: number; maxMistakes?: number } = {},
-) {
-	const SOFT = opts.softThreshold ?? 3
-	const HARD = opts.hardThreshold ?? 5
-	const maxMistakes = opts.maxMistakes ?? 3
+	// Step 1: check BEFORE updating state (matches production)
+	const result = checkDoomLoop(state, toolName, sig)
 
-	const currentParams = stableStringify(params)
-
-	// Step 1: Compare against PREVIOUS values (before updating state)
-	if (toolName === state.lastToolName && currentParams === state.lastToolParams) {
-		state.consecutiveIdenticalToolCount++
-	} else {
-		state.consecutiveIdenticalToolCount = 1
-	}
-
-	if (state.consecutiveIdenticalToolCount === SOFT) {
+	if (result.softWarning) {
 		state.userMessageContent.push({
 			type: "text",
-			text: `[WARNING] You have called "${toolName}" with identical arguments ${SOFT} times consecutively without making progress. You MUST try a different approach — use a different tool, different arguments, or reconsider your strategy.`,
+			text: `[WARNING] You have called "${toolName}" with identical arguments ${DOOM_LOOP_SOFT_THRESHOLD} times consecutively without making progress. You MUST try a different approach — use a different tool, different arguments, or reconsider your strategy.`,
 		})
 	}
-
-	if (state.consecutiveIdenticalToolCount >= HARD) {
+	if (result.hardEscalation) {
 		state.consecutiveMistakeCount = maxMistakes
 	}
 
-	// Step 2: Update state AFTER comparison (matches production order)
+	// Step 2: update state AFTER comparison (matches production)
 	state.lastToolName = toolName
-	state.lastToolParams = currentParams
+	state.lastToolParams = sig
+
+	return result
 }
+
+describe("stableStringify", () => {
+	it("sorts top-level keys", () => {
+		stableStringify({ b: 2, a: 1 }).should.equal(stableStringify({ a: 1, b: 2 }))
+	})
+
+	it("sorts nested object keys recursively", () => {
+		const a = { outer: { z: 1, a: 2 }, first: true }
+		const b = { first: true, outer: { a: 2, z: 1 } }
+		stableStringify(a).should.equal(stableStringify(b))
+	})
+
+	it("handles arrays (order-preserving)", () => {
+		stableStringify([3, 1, 2]).should.equal("[3,1,2]")
+		stableStringify([1, 2]).should.not.equal(stableStringify([2, 1]))
+	})
+
+	it("handles null", () => {
+		stableStringify(null).should.equal("null")
+	})
+
+	it("handles primitives", () => {
+		stableStringify("hello").should.equal('"hello"')
+		stableStringify(42).should.equal("42")
+		stableStringify(true).should.equal("true")
+	})
+
+	it("handles empty object", () => {
+		stableStringify({}).should.equal("{}")
+	})
+})
 
 describe("Doom Loop Detection", () => {
 	it("should not trigger warning before threshold", () => {
@@ -74,29 +83,27 @@ describe("Doom Loop Detection", () => {
 
 		simulateToolCall(state, "read_file", { path: "src/main.ts" })
 		simulateToolCall(state, "read_file", { path: "src/main.ts" })
-		simulateToolCall(state, "read_file", { path: "src/main.ts" })
+		const result = simulateToolCall(state, "read_file", { path: "src/main.ts" })
 
+		result.softWarning.should.be.true()
+		result.hardEscalation.should.be.false()
 		state.consecutiveIdenticalToolCount.should.equal(3)
 		state.userMessageContent.length.should.equal(1)
-		state.userMessageContent[0].type.should.equal("text")
-		;(state.userMessageContent[0] as any).text.should.containEql("[WARNING]")
-		;(state.userMessageContent[0] as any).text.should.containEql("read_file")
-		// Should not yet escalate to mistake count
+		const warning = state.userMessageContent[0] as { type: string; text: string }
+		warning.text.should.containEql("[WARNING]")
 		state.consecutiveMistakeCount.should.equal(0)
 	})
 
-	it("should escalate to consecutiveMistakeCount at hard threshold (5 identical calls)", () => {
+	it("should escalate at hard threshold (5 identical calls)", () => {
 		const state = new TaskState()
-		const maxMistakes = 3
 
 		for (let i = 0; i < 5; i++) {
-			simulateToolCall(state, "search_files", { regex: "TODO", path: "." }, { maxMistakes })
+			simulateToolCall(state, "search_files", { regex: "TODO", path: "." })
 		}
 
 		state.consecutiveIdenticalToolCount.should.equal(5)
-		state.consecutiveMistakeCount.should.equal(maxMistakes)
-		// Should have exactly one warning (from threshold 3)
-		state.userMessageContent.length.should.equal(1)
+		state.consecutiveMistakeCount.should.equal(3)
+		state.userMessageContent.length.should.equal(1) // one warning at threshold 3
 	})
 
 	it("should reset counter when different tool is used", () => {
@@ -104,34 +111,21 @@ describe("Doom Loop Detection", () => {
 
 		simulateToolCall(state, "read_file", { path: "src/main.ts" })
 		simulateToolCall(state, "read_file", { path: "src/main.ts" })
-		// Different tool breaks the streak
 		simulateToolCall(state, "list_files", { path: "src/" })
 
 		state.consecutiveIdenticalToolCount.should.equal(1)
-		state.lastToolName.should.equal("list_files")
 		state.userMessageContent.length.should.equal(0)
 	})
 
-	it("should reset counter when same tool is used with different params", () => {
+	it("should reset counter when same tool used with different params", () => {
 		const state = new TaskState()
 
 		simulateToolCall(state, "read_file", { path: "src/main.ts" })
 		simulateToolCall(state, "read_file", { path: "src/main.ts" })
-		// Same tool, different params
 		simulateToolCall(state, "read_file", { path: "src/utils.ts" })
 
 		state.consecutiveIdenticalToolCount.should.equal(1)
 		state.userMessageContent.length.should.equal(0)
-	})
-
-	it("should track params correctly via JSON.stringify", () => {
-		const state = new TaskState()
-
-		simulateToolCall(state, "search_files", { regex: "TODO", path: "src/" })
-		state.lastToolParams.should.equal(stableStringify({ regex: "TODO", path: "src/" }))
-
-		simulateToolCall(state, "search_files", { regex: "FIXME", path: "src/" })
-		state.consecutiveIdenticalToolCount.should.equal(1) // different params, reset
 	})
 
 	it("should handle empty params", () => {
@@ -147,11 +141,8 @@ describe("Doom Loop Detection", () => {
 
 	it("should not interfere with existing consecutiveMistakeCount from errors", () => {
 		const state = new TaskState()
-
-		// Simulate some errors incrementing the mistake count
 		state.consecutiveMistakeCount = 2
 
-		// Doom loop detection should not reset the mistake count below threshold
 		simulateToolCall(state, "read_file", { path: "a.ts" })
 		simulateToolCall(state, "read_file", { path: "a.ts" })
 
@@ -161,44 +152,53 @@ describe("Doom Loop Detection", () => {
 	it("should resume counting after a break", () => {
 		const state = new TaskState()
 
-		// Build up to 2
 		simulateToolCall(state, "read_file", { path: "a.ts" })
 		simulateToolCall(state, "read_file", { path: "a.ts" })
-		// Break
 		simulateToolCall(state, "list_files", { path: "." })
-		// Start again
 		simulateToolCall(state, "read_file", { path: "a.ts" })
 		simulateToolCall(state, "read_file", { path: "a.ts" })
 		simulateToolCall(state, "read_file", { path: "a.ts" })
 
-		// Should trigger warning on the new streak
 		state.consecutiveIdenticalToolCount.should.equal(3)
 		state.userMessageContent.length.should.equal(1)
 	})
 
 	it("should NOT count different tools with same params as identical", () => {
-		// This guards against the ordering bug where lastToolName is updated
-		// before the comparison, making the tool-name check dead.
 		const state = new TaskState()
 
 		simulateToolCall(state, "read_file", { path: "src/main.ts" })
-		simulateToolCall(state, "search_files", { path: "src/main.ts" }) // different tool, same params
-		simulateToolCall(state, "list_files", { path: "src/main.ts" })   // different tool, same params
+		simulateToolCall(state, "search_files", { path: "src/main.ts" })
+		simulateToolCall(state, "list_files", { path: "src/main.ts" })
 
 		state.consecutiveIdenticalToolCount.should.equal(1)
-		state.userMessageContent.length.should.equal(0) // no warning
+		state.userMessageContent.length.should.equal(0)
 	})
 
 	it("should treat different key orders as identical params", () => {
-		// Guards against JSON.stringify key-order sensitivity.
-		// stableStringify sorts keys, so {b:"2",a:"1"} === {a:"1",b:"2"}
 		const state = new TaskState()
 
 		simulateToolCall(state, "search_files", { regex: "TODO", path: "src/" })
-		simulateToolCall(state, "search_files", { path: "src/", regex: "TODO" }) // same params, different key order
+		simulateToolCall(state, "search_files", { path: "src/", regex: "TODO" })
 		simulateToolCall(state, "search_files", { regex: "TODO", path: "src/" })
 
 		state.consecutiveIdenticalToolCount.should.equal(3)
-		state.userMessageContent.length.should.equal(1) // warning triggered
+		state.userMessageContent.length.should.equal(1)
+	})
+
+	it("should treat nested objects with different key orders as identical", () => {
+		const state = new TaskState()
+
+		// biome-ignore lint/suspicious/noExplicitAny: test needs nested objects to verify recursive sorting
+		const call1 = { server: "gh", input: { repo: "cline", owner: "cline" } } as Record<string, any>
+		// biome-ignore lint/suspicious/noExplicitAny: test needs nested objects to verify recursive sorting
+		const call2 = { server: "gh", input: { owner: "cline", repo: "cline" } } as Record<string, any>
+		// biome-ignore lint/suspicious/noExplicitAny: test needs nested objects to verify recursive sorting
+		const call3 = { input: { repo: "cline", owner: "cline" }, server: "gh" } as Record<string, any>
+		simulateToolCall(state, "use_mcp_tool", call1)
+		simulateToolCall(state, "use_mcp_tool", call2)
+		simulateToolCall(state, "use_mcp_tool", call3)
+
+		state.consecutiveIdenticalToolCount.should.equal(3)
+		state.userMessageContent.length.should.equal(1)
 	})
 })

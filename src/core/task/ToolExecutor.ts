@@ -20,6 +20,7 @@ import { formatResponse } from "../prompts/responses"
 import { StateManager } from "../storage/StateManager"
 import { WorkspaceRootManager } from "../workspace"
 import { ToolResponse } from "."
+import { checkDoomLoop, DOOM_LOOP_SOFT_THRESHOLD, toolCallSignature } from "./doom-loop"
 import { MessageStateHandler } from "./message-state"
 import { TaskState } from "./TaskState"
 import { AutoApprove } from "./tools/autoApprove"
@@ -29,14 +30,6 @@ import { TaskConfig, validateTaskConfig } from "./tools/types/TaskConfig"
 import { createUIHelpers } from "./tools/types/UIHelpers"
 import { ToolDisplayUtils } from "./tools/utils/ToolDisplayUtils"
 import { ToolResultUtils } from "./tools/utils/ToolResultUtils"
-
-/**
- * Deterministic JSON serialization with sorted keys.
- * Ensures {a:"1",b:"2"} and {b:"2",a:"1"} produce the same string.
- */
-function stableStringify(obj: Record<string, unknown>): string {
-	return JSON.stringify(obj, Object.keys(obj).sort())
-}
 
 export function canonicalizeAttemptCompletionParams(block: ToolUse): boolean {
 	if (block.name === ClineDefaultTool.ATTEMPT && !block.params?.result && typeof block.params?.response === "string") {
@@ -584,33 +577,25 @@ export class ToolExecutor {
 			this.pushToolResult(toolResult, block)
 
 			// --- Doom loop detection ---
-			// Compare BEFORE updating lastToolName/lastToolParams so we check
+			// Must run BEFORE updating lastToolName/lastToolParams so we compare
 			// against the previous call's values, not the current one.
-			const DOOM_LOOP_SOFT_THRESHOLD = 3
-			const DOOM_LOOP_HARD_THRESHOLD = 5
+			const currentSignature = toolCallSignature(block.params)
+			const doomLoop = checkDoomLoop(this.taskState, block.name, currentSignature)
 
-			const currentParams = stableStringify(block.params ?? {})
-			if (block.name === this.taskState.lastToolName && currentParams === this.taskState.lastToolParams) {
-				this.taskState.consecutiveIdenticalToolCount++
-			} else {
-				this.taskState.consecutiveIdenticalToolCount = 1
-			}
-
-			if (this.taskState.consecutiveIdenticalToolCount === DOOM_LOOP_SOFT_THRESHOLD) {
+			if (doomLoop.softWarning) {
 				this.taskState.userMessageContent.push({
 					type: "text",
 					text: `[WARNING] You have called "${block.name}" with identical arguments ${DOOM_LOOP_SOFT_THRESHOLD} times consecutively without making progress. You MUST try a different approach — use a different tool, different arguments, or reconsider your strategy.`,
 				})
 			}
 
-			if (this.taskState.consecutiveIdenticalToolCount >= DOOM_LOOP_HARD_THRESHOLD) {
-				this.taskState.consecutiveMistakeCount =
-					this.stateManager.getGlobalSettingsKey("maxConsecutiveMistakes")
+			if (doomLoop.hardEscalation) {
+				this.taskState.consecutiveMistakeCount = this.stateManager.getGlobalSettingsKey("maxConsecutiveMistakes")
 			}
 
 			// Update state AFTER comparison
 			this.taskState.lastToolName = block.name
-			this.taskState.lastToolParams = currentParams
+			this.taskState.lastToolParams = currentSignature
 
 			// Check abort before running PostToolUse hook (success path)
 			if (this.taskState.abort) {
