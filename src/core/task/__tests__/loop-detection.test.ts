@@ -1,6 +1,6 @@
 import { describe, it } from "mocha"
 import "should"
-import { checkDoomLoop, DOOM_LOOP_SOFT_THRESHOLD, stableStringify, toolCallSignature } from "../doom-loop"
+import { checkRepeatedToolCall, LOOP_DETECTION_SOFT_THRESHOLD, stableStringify, toolCallSignature } from "../loop-detection"
 import { TaskState } from "../TaskState"
 
 /**
@@ -16,12 +16,12 @@ function simulateToolCall(state: TaskState, toolName: string, params: Record<str
 	const sig = toolCallSignature(params)
 
 	// Step 1: check BEFORE updating state (matches production)
-	const result = checkDoomLoop(state, toolName, sig)
+	const result = checkRepeatedToolCall(state, toolName, sig)
 
 	if (result.softWarning) {
 		state.userMessageContent.push({
 			type: "text",
-			text: `[WARNING] You have called "${toolName}" with identical arguments ${DOOM_LOOP_SOFT_THRESHOLD} times consecutively without making progress. You MUST try a different approach — use a different tool, different arguments, or reconsider your strategy.`,
+			text: `[WARNING] You have called "${toolName}" with identical arguments ${LOOP_DETECTION_SOFT_THRESHOLD} times consecutively without making progress. You MUST try a different approach — use a different tool, different arguments, or reconsider your strategy.`,
 		})
 	}
 	if (result.hardEscalation) {
@@ -66,7 +66,7 @@ describe("stableStringify", () => {
 	})
 })
 
-describe("Doom Loop Detection", () => {
+describe("Loop Detection", () => {
 	it("should not trigger warning before threshold", () => {
 		const state = new TaskState()
 

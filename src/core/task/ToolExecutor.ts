@@ -20,7 +20,7 @@ import { formatResponse } from "../prompts/responses"
 import { StateManager } from "../storage/StateManager"
 import { WorkspaceRootManager } from "../workspace"
 import { ToolResponse } from "."
-import { checkDoomLoop, DOOM_LOOP_SOFT_THRESHOLD, toolCallSignature } from "./doom-loop"
+import { checkRepeatedToolCall, LOOP_DETECTION_SOFT_THRESHOLD, toolCallSignature } from "./loop-detection"
 import { MessageStateHandler } from "./message-state"
 import { TaskState } from "./TaskState"
 import { AutoApprove } from "./tools/autoApprove"
@@ -576,20 +576,20 @@ export class ToolExecutor {
 			toolWasExecuted = true
 			this.pushToolResult(toolResult, block)
 
-			// --- Doom loop detection ---
+			// --- Repeated tool call loop detection ---
 			// Must run BEFORE updating lastToolName/lastToolParams so we compare
 			// against the previous call's values, not the current one.
 			const currentSignature = toolCallSignature(block.params)
-			const doomLoop = checkDoomLoop(this.taskState, block.name, currentSignature)
+			const loopCheck = checkRepeatedToolCall(this.taskState, block.name, currentSignature)
 
-			if (doomLoop.softWarning) {
+			if (loopCheck.softWarning) {
 				this.taskState.userMessageContent.push({
 					type: "text",
-					text: `[WARNING] You have called "${block.name}" with identical arguments ${DOOM_LOOP_SOFT_THRESHOLD} times consecutively without making progress. You MUST try a different approach — use a different tool, different arguments, or reconsider your strategy.`,
+					text: `[WARNING] You have called "${block.name}" with identical arguments ${LOOP_DETECTION_SOFT_THRESHOLD} times consecutively without making progress. You MUST try a different approach — use a different tool, different arguments, or reconsider your strategy.`,
 				})
 			}
 
-			if (doomLoop.hardEscalation) {
+			if (loopCheck.hardEscalation) {
 				this.taskState.consecutiveMistakeCount = this.stateManager.getGlobalSettingsKey("maxConsecutiveMistakes")
 			}
 

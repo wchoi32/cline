@@ -1,5 +1,13 @@
 /**
- * Doom loop detection helpers.
+ * Repeated tool call loop detection.
+ *
+ * Detects when the LLM calls the same tool with identical arguments
+ * repeatedly, which wastes tokens without making progress.
+ *
+ * This is complementary to fileReadCache in ReadFileToolHandler, which
+ * deduplicates file *content* on cache hits but still allows the tool
+ * call to succeed and consume a turn. Loop detection catches the
+ * repeated call pattern itself, regardless of which tool is involved.
  *
  * Shared between ToolExecutor (production) and tests so the
  * comparison algorithm cannot drift between the two.
@@ -7,8 +15,8 @@
 
 import type { TaskState } from "./TaskState"
 
-export const DOOM_LOOP_SOFT_THRESHOLD = 3
-export const DOOM_LOOP_HARD_THRESHOLD = 5
+export const LOOP_DETECTION_SOFT_THRESHOLD = 3
+export const LOOP_DETECTION_HARD_THRESHOLD = 5
 
 /**
  * Recursive canonical JSON serialization.
@@ -39,19 +47,19 @@ export function toolCallSignature(params: Record<string, unknown> | undefined): 
 	return stableStringify(params ?? {})
 }
 
-export interface DoomLoopResult {
+export interface LoopDetectionResult {
 	softWarning: boolean
 	hardEscalation: boolean
 }
 
 /**
- * Core doom loop detection step. Must be called BEFORE updating
+ * Core loop detection step. Must be called BEFORE updating
  * lastToolName / lastToolParams on TaskState.
  *
  * Compares the current call against the previous state, updates the
  * counter, and returns which thresholds (if any) were crossed.
  */
-export function checkDoomLoop(state: TaskState, toolName: string, currentSignature: string): DoomLoopResult {
+export function checkRepeatedToolCall(state: TaskState, toolName: string, currentSignature: string): LoopDetectionResult {
 	if (toolName === state.lastToolName && currentSignature === state.lastToolParams) {
 		state.consecutiveIdenticalToolCount++
 	} else {
@@ -59,7 +67,7 @@ export function checkDoomLoop(state: TaskState, toolName: string, currentSignatu
 	}
 
 	return {
-		softWarning: state.consecutiveIdenticalToolCount === DOOM_LOOP_SOFT_THRESHOLD,
-		hardEscalation: state.consecutiveIdenticalToolCount >= DOOM_LOOP_HARD_THRESHOLD,
+		softWarning: state.consecutiveIdenticalToolCount === LOOP_DETECTION_SOFT_THRESHOLD,
+		hardEscalation: state.consecutiveIdenticalToolCount >= LOOP_DETECTION_HARD_THRESHOLD,
 	}
 }
