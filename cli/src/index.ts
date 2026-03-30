@@ -71,6 +71,7 @@ interface TaskOptions {
 	autoApproveAll?: boolean
 	doubleCheckCompletion?: boolean
 	autoCondense?: boolean
+	checkpoints?: boolean
 	timeout?: string
 	json?: boolean
 	stdinWasPiped?: boolean
@@ -137,7 +138,7 @@ function normalizeMaxConsecutiveMistakes(value?: string): number | undefined {
 }
 
 /**
- * Apply task-related options (mode, model, thinking, yolo) to StateManager.
+ * Apply task-related options (mode, model, thinking, yolo, checkpoints) to StateManager.
  * Shared between runTask and resumeTask to avoid duplication.
  */
 function applyTaskOptions(options: TaskOptions): void {
@@ -221,6 +222,10 @@ function applyTaskOptions(options: TaskOptions): void {
 	if (options.autoCondense) {
 		StateManager.get().setSessionOverride("useAutoCondense", true)
 	}
+
+	// Checkpoints are opt-in for CLI task sessions so existing non-checkpointed
+	// runs keep their current behavior unless the user explicitly enables them.
+	StateManager.get().setSessionOverride("enableCheckpointsSetting", options.checkpoints ?? false)
 }
 
 /**
@@ -490,6 +495,7 @@ interface InitOptions {
 	hooksDir?: string
 	verbose?: boolean
 	enableAuth?: boolean
+	enableCheckpointsSetting?: boolean
 }
 
 /**
@@ -501,6 +507,7 @@ async function initializeCli(options: InitOptions): Promise<CliContext> {
 	const { extensionContext, storageContext, DATA_DIR, EXTENSION_DIR } = initializeCliContext({
 		clineDir: options.config,
 		workspaceDir: workspacePath,
+		enableCheckpointsSetting: options.enableCheckpointsSetting,
 	})
 
 	// Set up output channel and Logger early so ClineEndpoint.initialize logs are captured
@@ -583,7 +590,13 @@ async function runInkApp(element: React.ReactElement, cleanup: () => Promise<voi
  * Run a task with the given prompt - uses welcome view for consistent behavior
  */
 async function runTask(prompt: string, options: TaskOptions & { images?: string[] }, existingContext?: CliContext) {
-	const ctx = existingContext || (await initializeCli({ ...options, enableAuth: true }))
+	const ctx =
+		existingContext ||
+		(await initializeCli({
+			...options,
+			enableAuth: true,
+			enableCheckpointsSetting: options.checkpoints ?? false,
+		}))
 
 	// Parse images from the prompt text (e.g., @/path/to/image.png)
 	const { prompt: cleanPrompt, imagePaths: parsedImagePaths } = parseImagesFromInput(prompt)
@@ -834,6 +847,7 @@ program
 	.option("-v, --verbose", "Show verbose output")
 	.option("-c, --cwd <path>", "Working directory for the task")
 	.option("--config <path>", "Path to Cline configuration directory")
+	.option("--checkpoints", "Enable checkpoints for this CLI session")
 	.option("--thinking [tokens]", "Enable extended thinking (default: 1024 tokens)")
 	.option("--reasoning-effort <effort>", "Reasoning effort: none|low|medium|high|xhigh")
 	.option("--max-consecutive-mistakes <count>", "Maximum consecutive mistakes before halting in yolo mode")
@@ -926,7 +940,13 @@ function findTaskInHistory(taskId: string): HistoryItem | null {
  * Loads the task and optionally prefills the input with a prompt
  */
 async function resumeTask(taskId: string, options: TaskOptions & { initialPrompt?: string }, existingContext?: CliContext) {
-	const ctx = existingContext || (await initializeCli({ ...options, enableAuth: true }))
+	const ctx =
+		existingContext ||
+		(await initializeCli({
+			...options,
+			enableAuth: true,
+			enableCheckpointsSetting: options.checkpoints ?? false,
+		}))
 
 	// Validate task exists
 	const historyItem = findTaskInHistory(taskId)
@@ -979,7 +999,11 @@ async function resumeTask(taskId: string, options: TaskOptions & { initialPrompt
 }
 
 async function continueTask(options: TaskOptions) {
-	const ctx = await initializeCli({ ...options, enableAuth: true })
+	const ctx = await initializeCli({
+		...options,
+		enableAuth: true,
+		enableCheckpointsSetting: options.checkpoints ?? false,
+	})
 	const historyItem = findMostRecentTaskForWorkspace(StateManager.get().getGlobalStateKey("taskHistory"), ctx.workspacePath)
 
 	if (!historyItem) {
@@ -997,7 +1021,11 @@ async function continueTask(options: TaskOptions) {
  * If auth is not configured, show auth flow first
  */
 async function showWelcome(options: TaskOptions) {
-	const ctx = await initializeCli({ ...options, enableAuth: true })
+	const ctx = await initializeCli({
+		...options,
+		enableAuth: true,
+		enableCheckpointsSetting: options.checkpoints ?? false,
+	})
 
 	// Check if auth is configured
 	const hasAuth = await isAuthConfigured()
@@ -1053,6 +1081,7 @@ program
 	.option("--kanban", "Run npx kanban@latest --agent cline")
 	.option("-T, --taskId <id>", "Resume an existing task by ID")
 	.option("--continue", "Resume the most recent task from the current working directory")
+	.option("--checkpoints", "Enable checkpoints for this CLI session")
 	.action(async (prompt, options) => {
 		if (options.kanban) {
 			if (prompt) {

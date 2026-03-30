@@ -27,7 +27,7 @@ interface CheckpointMenuProps {
 /**
  * Extract checkpoint options from messages
  */
-function getCheckpointOptions(messages: ClineMessage[]): CheckpointOption[] {
+export function getCheckpointOptions(messages: ClineMessage[]): CheckpointOption[] {
 	const options: CheckpointOption[] = []
 
 	for (const msg of messages) {
@@ -48,7 +48,7 @@ function getCheckpointOptions(messages: ClineMessage[]): CheckpointOption[] {
 /**
  * Get a human-readable label for a checkpoint
  */
-function getCheckpointLabel(msg: ClineMessage): string {
+export function getCheckpointLabel(msg: ClineMessage): string {
 	if (msg.say === "completion_result") {
 		return "Task completion"
 	}
@@ -85,6 +85,15 @@ export const CheckpointMenu: React.FC<CheckpointMenuProps> = ({ messages, onSele
 	const [selectedCheckpoint, setSelectedCheckpoint] = useState(0)
 	const [selectedRestoreType, setSelectedRestoreType] = useState(0)
 	const [stage, setStage] = useState<"checkpoint" | "restoreType">("checkpoint")
+
+	// Auto-close empty checkpoint list when raw mode unavailable (Escape won't work).
+	// Must be declared before any conditional returns to satisfy React rules of hooks.
+	React.useEffect(() => {
+		if (checkpoints.length === 0 && !isRawModeSupported) {
+			const timer = setTimeout(() => onCancel(), 3000)
+			return () => clearTimeout(timer)
+		}
+	}, [checkpoints.length, isRawModeSupported, onCancel])
 
 	useInput(
 		(input, key) => {
@@ -136,7 +145,7 @@ export const CheckpointMenu: React.FC<CheckpointMenuProps> = ({ messages, onSele
 			<Box borderColor="yellow" borderStyle="round" flexDirection="column" marginTop={1} paddingLeft={1} paddingRight={1}>
 				<Text color="yellow">No checkpoints available</Text>
 				<Text color="gray">Checkpoints are created at task completion points</Text>
-				<Text color="gray">Press Escape to close</Text>
+				<Text color="gray">{isRawModeSupported ? "Press Escape to close" : "Closing automatically..."}</Text>
 			</Box>
 		)
 	}
