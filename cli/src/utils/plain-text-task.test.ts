@@ -12,7 +12,14 @@ describe("emitTaskStartedMessage", () => {
 
 		emitTaskStartedMessage("task-123", true)
 
-		expect(stdoutWriteSpy).toHaveBeenCalledWith('{"type":"task_started","taskId":"task-123"}\n')
+		const payload = JSON.parse(stdoutWriteSpy.mock.calls[0][0] as string)
+		expect(payload).toMatchObject({
+			schemaVersion: 1,
+			event: "start",
+			taskId: "task-123",
+			sessionId: "task-123",
+		})
+		expect(typeof payload.timestamp).toBe("number")
 		expect(stderrWriteSpy).not.toHaveBeenCalled()
 	})
 

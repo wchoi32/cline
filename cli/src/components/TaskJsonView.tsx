@@ -8,6 +8,14 @@ import React, { useEffect, useRef } from "react"
 import { useTaskContext, useTaskState } from "../context/TaskContext"
 import { useCompletionSignals } from "../hooks/useStateSubscriber"
 import { originalConsoleLog } from "../utils/console"
+import {
+	createStructuredCompleteEvent,
+	createStructuredMessageEvent,
+	createStructuredStartEvent,
+	deriveStructuredExitCode,
+	type StructuredEvent,
+	serializeStructuredEvent,
+} from "../utils/structured-output"
 
 interface TaskJsonViewProps {
 	taskId?: string
@@ -16,11 +24,8 @@ interface TaskJsonViewProps {
 	onError?: () => void
 }
 
-/**
- * Output a JSON line to stdout
- */
-function outputJson(data: object) {
-	originalConsoleLog(JSON.stringify(data))
+function outputJson(data: StructuredEvent) {
+	originalConsoleLog(serializeStructuredEvent(data))
 }
 
 export const TaskJsonView: React.FC<TaskJsonViewProps> = ({ taskId: _taskId, verbose = false, onComplete, onError }) => {
@@ -30,24 +35,17 @@ export const TaskJsonView: React.FC<TaskJsonViewProps> = ({ taskId: _taskId, ver
 	// Track outputted messages by timestamp (don't re-output on updates)
 	const outputtedMessages = useRef<Set<number>>(new Set())
 	const hasOutputtedCompletion = useRef(false)
+	const lastOutputtedStartTaskId = useRef<string | undefined>(undefined)
 
-	// Determine the role for a message
-	const getRole = (message: { type: string; ask?: string; say?: string }, index: number): "user" | "assistant" | "system" => {
-		// User feedback messages
-		if (message.say === "user_feedback" || message.say === "user_feedback_diff") {
-			return "user"
+	// Emit a structured task start event once per task id.
+	useEffect(() => {
+		if (!_taskId || lastOutputtedStartTaskId.current === _taskId) {
+			return
 		}
-		// First text message is the user's task
-		if (message.say === "text" && index === 0) {
-			return "user"
-		}
-		// System messages
-		if (message.say === "api_req_started" || message.say === "api_req_finished") {
-			return "system"
-		}
-		// Default: assistant
-		return "assistant"
-	}
+
+		lastOutputtedStartTaskId.current = _taskId
+		outputJson(createStructuredStartEvent(_taskId))
+	}, [_taskId])
 
 	// Output messages as JSON when they arrive
 	useEffect(() => {
@@ -74,25 +72,12 @@ export const TaskJsonView: React.FC<TaskJsonViewProps> = ({ taskId: _taskId, ver
 				}
 			}
 
-			const role = getRole(message, i)
-
 			// Output the message as JSON
-			outputJson({
-				type: "message",
-				timestamp: message.ts,
-				role,
-				messageType: message.type,
-				...(message.ask && { ask: message.ask }),
-				...(message.say && { say: message.say }),
-				...(message.text && { text: message.text }),
-				...(message.reasoning && { reasoning: message.reasoning }),
-				...(message.images && message.images.length > 0 && { images: message.images }),
-				...(message.files && message.files.length > 0 && { files: message.files }),
-			})
+			outputJson(createStructuredMessageEvent(message, i, _taskId))
 
 			outputtedMessages.current.add(message.ts)
 		}
-	}, [state.clineMessages, verbose])
+	}, [state.clineMessages, verbose, _taskId])
 
 	// Handle task completion
 	useEffect(() => {
@@ -104,11 +89,15 @@ export const TaskJsonView: React.FC<TaskJsonViewProps> = ({ taskId: _taskId, ver
 			const isError = completionMsg?.say === "error" || completionMsg?.ask === "api_req_failed"
 
 			// Output completion status
-			outputJson({
-				type: "completion",
-				status: isError ? "error" : "success",
-				timestamp: Date.now(),
-			})
+				outputJson(
+					createStructuredCompleteEvent({
+						status: isError ? "error" : "success",
+						exitCode: deriveStructuredExitCode(isError ? "error" : "success"),
+						errorMessage: isError ? completionMsg?.text : undefined,
+						message: completionMsg ?? undefined,
+						taskId: _taskId,
+					}),
+				)
 
 			if (isError) {
 				onError?.()
@@ -118,7 +107,7 @@ export const TaskJsonView: React.FC<TaskJsonViewProps> = ({ taskId: _taskId, ver
 
 			// Don't exit automatically - let the parent handle cleanup
 		}
-	}, [isTaskComplete, setIsComplete, onComplete, onError, getCompletionMessage])
+	}, [isTaskComplete, setIsComplete, onComplete, onError, getCompletionMessage, _taskId])
 
 	// Render nothing visible - all output goes to stdout as JSON
 	return <Box />

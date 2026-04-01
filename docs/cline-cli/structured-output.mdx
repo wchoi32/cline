@@ -1,0 +1,150 @@
+---
+title: "Structured Output"
+description: "Machine-readable JSONL event protocol for CLI automation and CI/CD"
+---
+
+# Structured CLI Output
+
+When running with `--json`, the Cline CLI emits **one JSON object per line** (JSONL format) to stdout. Each line is a self-contained event with a versioned envelope.
+
+## Schema Version
+
+All events include `schemaVersion: 1`. This field will be incremented if breaking changes are made to the event format. Consumers should check this field and handle unknown versions gracefully.
+
+## Event Types
+
+There are three event types: `start`, `message`, and `complete`.
+
+### `start`
+
+Emitted once when a task begins.
+
+```json
+{
+  "schemaVersion": 1,
+  "event": "start",
+  "timestamp": 1711100000000,
+  "taskId": "abc123",
+  "sessionId": "abc123"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `schemaVersion` | `1` | Protocol version |
+| `event` | `"start"` | Event type |
+| `timestamp` | `number` | Unix milliseconds |
+| `taskId` | `string` | Unique task identifier |
+| `sessionId` | `string` | Currently equals `taskId`. Will be differentiated when durable session support is added. |
+
+### `message`
+
+Emitted for each message in the conversation (user input, assistant responses, system events). Includes all fields from the underlying `ClineMessage` plus the envelope.
+
+```json
+{
+  "schemaVersion": 1,
+  "event": "message",
+  "timestamp": 1711100001000,
+  "ts": 1711100001000,
+  "taskId": "abc123",
+  "sessionId": "abc123",
+  "role": "assistant",
+  "messageType": "say",
+  "type": "say",
+  "say": "text",
+  "text": "I'll help you fix that bug..."
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `schemaVersion` | `1` | Protocol version |
+| `event` | `"message"` | Event type |
+| `timestamp` | `number` | Unix milliseconds (canonical) |
+| `ts` | `number` | Same as `timestamp`. Preserved for backward compatibility with raw `ClineMessage`. |
+| `taskId` | `string?` | Task identifier |
+| `sessionId` | `string?` | Session identifier |
+| `role` | `"user" \| "assistant" \| "system"` | Derived role |
+| `messageType` | `string` | Original `ClineMessage.type` (`"say"` or `"ask"`) |
+| `...` | | All other fields from `ClineMessage` are included (e.g., `say`, `ask`, `text`, `images`, `partial`) |
+
+**Role derivation rules:**
+- `"user"` — `say === "user_feedback"` or `say === "user_feedback_diff"` or first message with `say === "text"`
+- `"system"` — `say === "api_req_started"` or `say === "api_req_finished"`
+- `"assistant"` — everything else
+
+**Important:** Envelope fields (`schemaVersion`, `event`, `timestamp`, `role`, `messageType`) always take precedence over any identically-named fields in the underlying `ClineMessage`.
+
+### `complete`
+
+Emitted when the task finishes (success or failure).
+
+```json
+{
+  "schemaVersion": 1,
+  "event": "complete",
+  "timestamp": 1711100060000,
+  "taskId": "abc123",
+  "sessionId": "abc123",
+  "status": "success",
+  "exitCode": 0,
+  "result": "Fixed the null check in main.ts"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `schemaVersion` | `1` | Protocol version |
+| `event` | `"complete"` | Event type |
+| `timestamp` | `number` | Unix milliseconds |
+| `taskId` | `string?` | Task identifier |
+| `sessionId` | `string?` | Session identifier |
+| `status` | `"success" \| "error" \| "timeout" \| "aborted"` | Terminal status |
+| `exitCode` | `number` | Process exit code (see table below) |
+| `result` | `string?` | Completion result text (only on success) |
+| `error` | `string?` | Error message (only on non-success) |
+| `messageType` | `string?` | Original message type if derived from a `ClineMessage` |
+| `ask` | `string?` | Original ask type if present |
+| `say` | `string?` | Original say type if present |
+| `text` | `string?` | Original text content if present |
+
+Errors are represented as `complete` events with `status: "error"` (or `"timeout"` / `"aborted"`). There is no separate `error` event type — all terminal states go through `complete`.
+
+## Exit Codes
+
+| Code | Status | Meaning |
+|------|--------|---------|
+| `0` | `success` | Task completed via `attempt_completion` |
+| `1` | `error` | Unhandled error or tool failure |
+| `4` | `timeout` | Task exceeded the `--timeout` limit |
+| `5` | `aborted` | User cancelled the task |
+
+## Usage
+
+```bash
+# Run a task with structured output
+cline "fix the bug in main.ts" --json
+
+# Pipe through jq
+cline "fix the bug" --json | jq 'select(.event == "complete")'
+
+# In CI - check exit code
+cline "run tests" --json -y
+echo "Exit code: $?"
+
+# Parse tool calls
+cline "refactor utils" --json | jq 'select(.event == "message" and .say == "tool")'
+```
+
+## Backward Compatibility
+
+- `schemaVersion` will be incremented on breaking changes
+- New fields may be added to existing event types without a version bump
+- Consumers should ignore unknown fields
+- The `--json` flag is the stable entry point; `--output jsonl` may be added as an alias in the future
+- Default output (without `--json`) remains human-readable text and is not covered by this spec
+
+## Differences from Raw ClineMessage
+
+When `--json` was first introduced, it emitted raw `ClineMessage` objects without an envelope. The structured output format wraps these in a versioned envelope with lifecycle events (`start`, `message`, `complete`). All original `ClineMessage` fields are preserved in `message` events for backward compatibility, but the envelope fields always take precedence.

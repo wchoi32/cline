@@ -310,7 +310,7 @@ async function runTaskInPlainTextMode(
 	telemetryService.captureHostEvent("plain_text_mode", reason)
 
 	// Plain text mode: no Ink rendering, just clean text output
-	const success = await runPlainTextTask({
+	const result = await runPlainTextTask({
 		controller: ctx.controller,
 		prompt: taskConfig.prompt,
 		taskId: taskConfig.taskId,
@@ -325,7 +325,7 @@ async function runTaskInPlainTextMode(
 
 	// Ensure stdout is fully drained before exiting - critical for piping
 	await drainStdout()
-	exit(success ? 0 : 1)
+	exit(result.exitCode)
 }
 
 /**
@@ -837,7 +837,7 @@ program
 	.option("--thinking [tokens]", "Enable extended thinking (default: 1024 tokens)")
 	.option("--reasoning-effort <effort>", "Reasoning effort: none|low|medium|high|xhigh")
 	.option("--max-consecutive-mistakes <count>", "Maximum consecutive mistakes before halting in yolo mode")
-	.option("--json", "Output messages as JSON instead of styled text")
+	.option("--json", "Output structured JSONL events instead of styled text")
 	.option("--double-check-completion", "Reject first completion attempt to force re-verification")
 	.option("--auto-condense", "Enable AI-powered context compaction instead of mechanical truncation")
 	.option("--hooks-dir <path>", "Path to additional hooks directory for runtime hook injection")
@@ -1045,7 +1045,7 @@ program
 	.option("--thinking [tokens]", "Enable extended thinking (default: 1024 tokens)")
 	.option("--reasoning-effort <effort>", "Reasoning effort: none|low|medium|high|xhigh")
 	.option("--max-consecutive-mistakes <count>", "Maximum consecutive mistakes before halting in yolo mode")
-	.option("--json", "Output messages as JSON instead of styled text")
+	.option("--json", "Output structured JSONL events instead of styled text")
 	.option("--double-check-completion", "Reject first completion attempt to force re-verification")
 	.option("--auto-condense", "Enable AI-powered context compaction instead of mechanical truncation")
 	.option("--hooks-dir <path>", "Path to additional hooks directory for runtime hook injection")

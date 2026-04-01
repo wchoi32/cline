@@ -17,6 +17,13 @@ import type { Controller } from "@/core/controller"
 import { getRequestRegistry } from "@/core/controller/grpc-handler"
 import { subscribeToState } from "@/core/controller/state/subscribeToState"
 import { showTaskWithId } from "@/core/controller/task/showTaskWithId"
+import {
+	createStructuredCompleteEvent,
+	createStructuredMessageEvent,
+	deriveStructuredExitCode,
+	inferStructuredStatusFromError,
+	writeStructuredEvent,
+} from "./structured-output"
 import { emitTaskStartedMessage } from "./task-start-output"
 
 export interface PlainTextTaskOptions {
@@ -32,17 +39,23 @@ export interface PlainTextTaskOptions {
 	taskId?: string
 }
 
+export interface PlainTextTaskResult {
+	success: boolean
+	exitCode: number
+	status: "success" | "error" | "timeout" | "aborted"
+}
+
 /**
  * Run a task with plain text output (no Ink, no ANSI codes)
- * Returns true if task completed successfully, false if error
+ * Returns a structured completion result with normalized exit codes.
  *
  * Output behavior:
  * - Non-JSON mode: Only writes final completion_result text to stdout
- * - JSON mode: Streams JSON lines to stdout as messages arrive (unchanged)
+ * - JSON mode: Streams structured JSONL events to stdout as messages arrive
  * - Verbose mode: Progress info goes to stderr
  * - Errors: Always go to stderr
  */
-export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<boolean> {
+export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<PlainTextTaskResult> {
 	const { controller, prompt, imageDataUrls, verbose, jsonOutput } = options
 
 	let completionResolve: (reason?: any) => void
@@ -54,6 +67,8 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<b
 
 	let hasError = false
 	let hasEmittedTaskStarted = false
+	let emittedCompletionEvent = false
+	let terminalStatus: PlainTextTaskResult["status"] = "success"
 	// Track which messages have been processed (by timestamp)
 	const processedMessages = new Map<number, string>()
 
@@ -78,8 +93,27 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<b
 		hasEmittedTaskStarted = true
 	}
 
+	const emitCompletionEvent = (status: PlainTextTaskResult["status"], message?: ClineMessage, errorMessage?: string) => {
+		if (!jsonOutput || emittedCompletionEvent) {
+			return
+		}
+
+		emittedCompletionEvent = true
+		const taskId = controller.task?.taskId
+		writeStructuredEvent(
+			createStructuredCompleteEvent({
+				status,
+				exitCode: deriveStructuredExitCode(status),
+				errorMessage: status === "success" ? undefined : errorMessage || message?.text || "Task failed",
+				message,
+				taskId,
+			}),
+			(line) => process.stdout.write(line),
+		)
+	}
+
 	// Helper to process a message and track completion state
-	const processMessage = (message: ClineMessage) => {
+	const processMessage = (message: ClineMessage, index: number) => {
 		const ts = message.ts || 0
 		if (message.partial || processedMessages.has(ts)) {
 			return
@@ -87,7 +121,7 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<b
 
 		// JSON mode: stream all messages to stdout (existing behavior)
 		if (jsonOutput) {
-			process.stdout.write(JSON.stringify(message) + "\n")
+			writeStructuredEvent(createStructuredMessageEvent(message, index, controller.task?.taskId), (line) => process.stdout.write(line))
 		} else {
 			handleMessageForPipeMode(message, verbose || false)
 		}
@@ -99,9 +133,13 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<b
 		// AFTER we sent our resume message (ts > completionCutoffTs)
 		if (message.say === "completion_result" || message.ask === "completion_result") {
 			if (isViewTaskOnly || ts > completionCutoffTs) {
+				terminalStatus = "success"
+				emitCompletionEvent("success", message)
 				completionResolve()
 			}
 		} else if (message.say === "error" || message.ask === "api_req_failed") {
+			terminalStatus = "error"
+			emitCompletionEvent("error", message, message.text ?? "message.say error || message.ask api_req_failed")
 			completionReject(message.text ?? "message.say error || message.ask api_req_failed")
 		}
 	}
@@ -113,17 +151,18 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<b
 		async ({ stateJson }) => {
 			try {
 				const state = JSON.parse(stateJson) as ExtensionState
-				for (const message of state.clineMessages ?? []) {
-					processMessage(message)
+				const messages = state.clineMessages ?? []
+				for (let i = 0; i < messages.length; i++) {
+					processMessage(messages[i], i)
 				}
 			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error)
 				if (jsonOutput) {
-					process.stdout.write(
-						JSON.stringify({ type: "error", message: error instanceof Error ? error.message : String(error) }) + "\n",
-					)
+					emitCompletionEvent(inferStructuredStatusFromError(error), undefined, errorMessage)
 				} else {
-					process.stderr.write(`Error: ${error instanceof Error ? error.message : String(error)}\n`)
+					process.stderr.write(`Error: ${errorMessage}\n`)
 				}
+				terminalStatus = inferStructuredStatusFromError(error)
 				completionReject(error)
 			}
 		},
@@ -163,8 +202,9 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<b
 		}
 	} catch (error) {
 		const errMsg = error instanceof Error ? error.message : String(error)
+		terminalStatus = inferStructuredStatusFromError(error)
 		if (jsonOutput) {
-			process.stdout.write(JSON.stringify({ type: "error", message: errMsg }) + "\n")
+			emitCompletionEvent(terminalStatus, undefined, errMsg)
 		} else {
 			process.stderr.write(`Error: ${errMsg}\n`)
 		}
@@ -183,7 +223,11 @@ export async function runPlainTextTask(options: PlainTextTaskOptions): Promise<b
 		process.stdout.write(msg + "\n")
 	}
 
-	return !hasError
+	return {
+		success: !hasError,
+		exitCode: deriveStructuredExitCode(terminalStatus),
+		status: terminalStatus,
+	}
 }
 
 /**
